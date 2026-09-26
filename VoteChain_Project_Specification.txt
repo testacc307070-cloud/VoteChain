@@ -1,0 +1,1151 @@
+VOTECHAIN Privacy-Preserving Blockchain-Based Electronic Voting System
+=============================================================
+
+1. PROJECT OVERVIEW
+
+VoteChain is a privacy-preserving electronic voting prototype that
+combines secure voter authentication, secret-ballot techniques,
+encryption, blockchain-based auditability, cryptographic verification,
+and multi-party election administration.
+
+The main objective is to demonstrate how an electronic voting system can
+provide:
+
+-   Voter eligibility and authentication
+-   One-person-one-vote enforcement
+-   Privacy of individual voting choices
+-   Tamper-evident vote records
+-   Publicly verifiable election information
+-   Cryptographic proof that votes were recorded
+-   Controlled and auditable election administration
+
+VoteChain is intended as an educational/research prototype. It should
+not be presented as a production-ready replacement for government
+elections. Real-world elections require substantially more testing,
+certification, legal controls, accessibility measures, operational
+security, independent audits, and physical/election procedures.
+
+2. MAIN PROJECT IDEA
+
+The core design principle is:
+
+    "A voter should be able to prove that their vote was accepted and
+     included in the election without revealing who they voted for."
+
+The system therefore separates:
+
+    Voter Identity
+          |
+          v
+    Authentication / Eligibility
+          |
+          v
+    Anonymous Voting Credential
+          |
+          v
+    Encrypted Vote
+          |
+          v
+    Cryptographic Proof
+          |
+          v
+    Blockchain / Election Ledger
+          |
+          v
+    Verifiable Tally
+
+3. SELECTED FEATURES
+
+3.1 Voter Registration ~~~~~~~~~~~~~~~~~~~~~~
+
+The election administrator can register eligible voters.
+
+Information can include:
+
+-   Voter ID
+-   Name
+-   Email or contact information
+-   Authentication credentials
+-   Eligibility status
+-   Election eligibility
+
+Sensitive identity information should remain in the protected
+application database and should NOT be placed directly on the public
+blockchain.
+
+3.2 Voter Authentication ~~~~~~~~~~~~~~~~~~~~~~~~
+
+Voters authenticate before accessing an election.
+
+Possible implementation:
+
+-   Voter ID + password
+-   Password hashing
+-   Optional OTP/email verification
+-   Session or JWT-based authentication
+-   Role-based access control
+
+The authentication system establishes that a person is an eligible
+voter. It should not directly link the person’s identity to their final
+vote.
+
+3.3 Election Creation ~~~~~~~~~~~~~~~~~~~~
+
+Administrators can create elections containing:
+
+-   Election name
+-   Description
+-   Start date/time
+-   End date/time
+-   Election status
+-   Candidate list
+-   Eligible voter list
+
+Election lifecycle:
+
+    DRAFT -> UPCOMING -> ACTIVE -> CLOSED -> RESULTS PUBLISHED
+
+3.4 Candidate Management ~~~~~~~~~~~~~~~~~~~~~~~~
+
+Administrators can:
+
+-   Add candidates
+-   Edit candidate information before the election is locked
+-   Add candidate description/photo
+-   Associate candidates with an election
+-   Lock the candidate list when voting begins
+
+After an election becomes active, important election configuration
+should become immutable.
+
+3.5 One-Person-One-Vote ~~~~~~~~~~~~~~~~~~~~~~~
+
+The system prevents an eligible voter from submitting multiple valid
+votes in the same election.
+
+The system maintains a secure voting-status mechanism such as:
+
+    eligible = true
+    credential_used = false
+
+After successful vote submission:
+
+    credential_used = true
+
+The system must also protect against replaying an old voting
+transaction.
+
+3.6 Secret Ballot ~~~~~~~~~~~~~~~~~
+
+The voter’s identity must be separated from their vote choice.
+
+The system should NOT store:
+
+    Voter123 -> Candidate A
+
+as a directly accessible record.
+
+Instead, the architecture should separate:
+
+    Identity / eligibility database
+
+from:
+
+    Anonymous encrypted voting records
+
+This is one of the central privacy features of VoteChain.
+
+3.7 Vote Encryption ~~~~~~~~~~~~~~~~~~~
+
+Before a vote is committed to the election ledger, the vote is encrypted
+using established cryptographic libraries.
+
+Conceptually:
+
+    Candidate B
+         |
+         v
+    Encryption
+         |
+         v
+    Ciphertext
+         |
+         v
+    Blockchain / Ledger
+
+The system should avoid implementing cryptographic algorithms from
+scratch. Use established, audited cryptographic libraries.
+
+3.8 Blockchain Vote Record ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The blockchain is used as a tamper-evident audit layer.
+
+A vote transaction can contain a cryptographic representation such as:
+
+-   Encrypted vote / commitment
+-   Election ID
+-   Vote/transaction identifier
+-   Timestamp
+-   Cryptographic proof
+-   Relevant hash values
+
+Personally identifiable voter information should not be stored on-chain.
+
+For a student prototype, an Ethereum-compatible local blockchain is a
+practical choice.
+
+3.9 Transaction / Hash ID ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+After a vote is successfully recorded, the voter receives a receipt
+containing information such as:
+
+-   Receipt ID
+-   Transaction hash
+-   Block number
+-   Timestamp
+-   Election ID
+
+The receipt allows the voter to later verify that their vote record
+exists without exposing their candidate choice.
+
+3.10 Vote Counting ~~~~~~~~~~~~~~~~~~
+
+After the election closes, valid votes are tallied.
+
+For the privacy-preserving design, the tally should operate on encrypted
+or cryptographically protected vote data whenever possible.
+
+The final tally produces:
+
+-   Candidate totals
+-   Total valid votes
+-   Participation/turnout
+-   Invalid/rejected vote count where applicable
+
+Results should only become visible according to the election’s
+configured result-publication policy.
+
+3.11 Public Verification ~~~~~~~~~~~~~~~~~~~~~~~~
+
+A public user can verify election information without accessing private
+voter information.
+
+Possible checks:
+
+-   Election exists
+-   Election status
+-   Number of recorded votes
+-   Blockchain transactions
+-   Merkle root
+-   Integrity status
+-   Cryptographic verification status
+-   Final result after publication
+
+The public verification portal must never expose individual voter
+choices.
+
+3.12 Result Dashboard ~~~~~~~~~~~~~~~~~~~~~
+
+After the election closes, an administrator/public user can see:
+
+-   Candidate totals
+-   Total votes
+-   Participation rate
+-   Election status
+-   Verification status
+-   Blockchain integrity status
+
+During an active election, sensitive interim results can remain hidden.
+
+3.13 Audit Log ~~~~~~~~~~~~~~
+
+The system records important administrative and system events.
+
+Examples:
+
+-   Election created
+-   Candidate added
+-   Candidate list locked
+-   Voter authenticated
+-   Voting credential issued
+-   Vote submitted
+-   Blockchain transaction confirmed
+-   Election closed
+-   Tally authorized
+-   Results published
+
+The audit log should be append-oriented and protected from unauthorized
+modification.
+
+3.14 Tamper Detection ~~~~~~~~~~~~~~~~~~~~
+
+VoteChain uses hashes and blockchain structures to detect unauthorized
+modification.
+
+If a record changes, its calculated cryptographic hash will no longer
+match the expected value.
+
+Example:
+
+    Original hash:   A72F91BC...
+    Current hash:    91AC72EF...
+
+    STATUS: INTEGRITY VIOLATION
+
+3.15 Election Status ~~~~~~~~~~~~~~~~~~~~
+
+Every election has a controlled lifecycle:
+
+    UPCOMING
+        |
+        v
+    ACTIVE
+        |
+        v
+    CLOSED
+        |
+        v
+    RESULTS PUBLISHED
+
+The system prevents inappropriate operations based on status.
+
+For example:
+
+-   Cannot vote before ACTIVE
+-   Cannot vote after CLOSED
+-   Cannot modify candidates after the election is locked
+-   Cannot publish final results before the election is closed
+
+3.16 Admin Dashboard ~~~~~~~~~~~~~~~~~~~~
+
+The administrator dashboard provides:
+
+-   Election management
+-   Voter management
+-   Candidate management
+-   Election status
+-   Participation statistics
+-   Audit logs
+-   Blockchain status
+-   Verification status
+-   Multi-authority tally controls
+-   Security/operational alerts
+
+3.17 Voter Dashboard ~~~~~~~~~~~~~~~~~~~~
+
+The voter dashboard provides:
+
+-   Active/upcoming elections
+-   Election information
+-   Candidate information
+-   Voting interface
+-   Voting status
+-   Receipt ID
+-   Transaction/hash ID
+-   Vote verification
+-   Election proof/QR information where appropriate
+
+It should never display the voter’s stored candidate choice after
+submission.
+
+4. ADVANCED / UNIQUE FEATURES
+
+4.1 Anonymous Vote Verification ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The voter can verify that their anonymous vote was successfully included
+in the election.
+
+The verification process should prove:
+
+    "A valid vote associated with my voting credential was accepted."
+
+without revealing:
+
+    "I voted for Candidate X."
+
+4.2 Zero-Knowledge Vote Validation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A zero-knowledge proof can allow the system to prove that an encrypted
+vote is valid without revealing the selected candidate.
+
+Conceptually:
+
+    Encrypted Vote + ZK Proof
+              |
+              v
+    Blockchain verifies proof
+              |
+              v
+          Valid Vote
+
+For example, the proof can demonstrate that the encrypted value
+represents one of the allowed candidates without revealing which
+candidate.
+
+This is an advanced module and should be implemented after the basic
+voting system works.
+
+4.3 Public Election Integrity Dashboard
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A dedicated public page displays election integrity information.
+
+Example:
+
+    Election: Student Council 2026
+
+    Votes recorded:        1,284
+    Verified records:      1,284
+    Invalid records:           0
+    Blockchain status:     VALID
+    Merkle root:           91AC72...
+    Ledger integrity:      PASS
+
+The dashboard provides transparency without exposing private votes.
+
+4.4 Multi-Authority Vote Decryption ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of allowing one administrator to control sensitive
+tally/decryption operations, VoteChain can distribute authority across
+several trusted election authorities.
+
+Example:
+
+    Authority A
+    Authority B
+    Authority C
+    Authority D
+    Authority E
+
+A threshold such as 3-of-5 can be required for a sensitive operation.
+
+    A = YES
+    B = YES
+    C = YES
+    D = NO
+    E = NO
+
+    3/5 -> Authorized
+
+This demonstrates threshold cryptography and reduces dependence on one
+administrator.
+
+For the prototype, the authorities can be represented as separate
+cryptographic key shares or simulated authority accounts, depending on
+implementation complexity.
+
+4.5 Proof of Election QR Code ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+At the end of an election, VoteChain generates a QR code containing an
+election verification reference.
+
+Scanning the QR code opens the public verification portal.
+
+The verification page can display:
+
+-   Election ID
+-   Election status
+-   Blockchain reference
+-   Merkle root
+-   Verification status
+-   Published results
+
+The QR code should not contain sensitive voter information.
+
+4.6 Merkle Tree-Based Verification ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+VoteChain can organize cryptographic vote records into a Merkle tree.
+
+Conceptually:
+
+                     Merkle Root
+                    /           \
+                  H12           H34
+                 /  \          /  \
+               H1   H2       H3   H4
+              / \   / \     / \   / \
+             V1 V2 V3 V4   V5 V6 V7 V8
+
+The Merkle root provides a compact cryptographic commitment to the set
+of records.
+
+A voter or observer can use a Merkle proof to verify that a particular
+encrypted vote/record belongs to the election ledger without downloading
+or exposing every record.
+
+4.7 Real-Time Election Transparency ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+During the election, the public can see non-sensitive system information
+such as:
+
+-   Election status
+-   Number of votes recorded
+-   Blockchain block count
+-   Verified transaction count
+-   System integrity
+-   Participation percentage
+
+Sensitive candidate-level interim results can remain hidden until the
+configured result-publication stage.
+
+This provides transparency without unnecessarily influencing voters.
+
+4.8 Offline / Network Failure Demonstration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+VoteChain includes a demonstration mode for network failure.
+
+When connectivity is unavailable:
+
+    Network unavailable
+           |
+           v
+    Vote transaction pending
+           |
+           v
+    Network restored
+           |
+           v
+    Transaction submitted
+           |
+           v
+    Blockchain confirmation
+
+This feature should be clearly documented as a prototype fault-tolerance
+demonstration. A real election cannot simply treat an offline local vote
+as valid without additional secure election procedures.
+
+4.9 Independent Election Observers ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A dedicated observer role can inspect the election without being allowed
+to modify it.
+
+Observers can see:
+
+-   Election configuration
+-   Candidate-list lock status
+-   Blockchain health
+-   Transaction verification
+-   Audit events
+-   Integrity checks
+-   Final tally verification
+
+Observers cannot:
+
+-   Cast votes
+-   Modify candidates
+-   Modify voters
+-   Change election configuration
+-   Decrypt votes unless explicitly authorized as part of the configured
+    multi-authority protocol
+
+5. PROPOSED SYSTEM ARCHITECTURE
+
+Recommended high-level architecture:
+
+    +-------------------------+
+    |       FRONTEND          |
+    | React / Next.js         |
+    |                         |
+    | Voter Portal            |
+    | Admin Dashboard         |
+    | Observer Portal         |
+    | Public Verification     |
+    +------------+------------+
+                 |
+                 v
+    +-------------------------+
+    |       BACKEND API       |
+    | Node.js + TypeScript    |
+    |                         |
+    | Authentication          |
+    | Election Management     |
+    | Voting Service          |
+    | Audit Service           |
+    | Verification Service    |
+    +------+------------+-----+
+           |            |
+           v            v
+    +-------------+   +-------------------+
+    | PostgreSQL  |   | Cryptography      |
+    |             |   | Encryption        |
+    | Users       |   | Signatures        |
+    | Elections   |   | ZK proofs         |
+    | Candidates  |   | Commitments       |
+    | Audit data  |   | Merkle trees      |
+    +-------------+   +---------+---------+
+                                |
+                                v
+                       +-------------------+
+                       | Blockchain Layer  |
+                       |                   |
+                       | Smart Contract    |
+                       | Transactions      |
+                       | Hashes            |
+                       | Block references  |
+                       +---------+---------+
+                                 |
+                                 v
+                       +-------------------+
+                       | Local/Testnet     |
+                       | Ethereum-compatible|
+                       | Blockchain        |
+                       +-------------------+
+
+6. RECOMMENDED TECHNOLOGY STACK
+
+Frontend: - Next.js or React - TypeScript - Tailwind CSS - Chart.js or
+Recharts for dashboards
+
+Backend: - Node.js - TypeScript - Express.js or NestJS - REST API -
+JWT/session authentication - Role-based access control
+
+Database: - PostgreSQL - Prisma ORM
+
+Blockchain: - Solidity - Hardhat or Foundry/Anvil - Ethereum-compatible
+local blockchain - ethers.js or viem
+
+Cryptography: - SHA-256 / Keccak-256 for appropriate hashing use cases -
+Public-key encryption using established libraries - Digital signatures -
+Cryptographic commitments - Merkle trees - Threshold cryptography -
+Zero-knowledge proofs using an established ZK framework/library
+
+Important: Do not implement cryptographic primitives from scratch. Use
+established, well-tested libraries.
+
+Authentication/Security: - Argon2id or bcrypt for password hashing -
+Secure sessions or short-lived JWTs - HTTPS/TLS - Input validation -
+Rate limiting - CSRF protection where applicable - Secure HTTP headers -
+Server-side authorization checks - Secrets stored in environment/secret
+management systems
+
+QR: - QR code generation library - Public verification URL containing a
+non-sensitive election/receipt reference
+
+Testing: - Unit tests - API integration tests - Smart contract tests -
+End-to-end tests - Cryptographic verification tests - Security/attack
+simulation tests
+
+7. PROPOSED DATABASE STRUCTURE
+
+Users: - id - voter_id - name - email - password_hash - role - status -
+created_at
+
+Elections: - id - name - description - start_time - end_time - status -
+candidate_lock_status - result_publication_status - merkle_root -
+created_at
+
+Candidates: - id - election_id - name - description - image_reference -
+created_at
+
+VotingCredentials: - id - election_id - credential_hash - status -
+used_at
+
+VoteRecords: - id - election_id - anonymous_vote_reference -
+encrypted_vote - commitment - transaction_hash - block_number -
+timestamp
+
+AuditLogs: - id - event_type - actor_reference - election_id -
+timestamp - event_hash
+
+Observers: - id - user_id - election_id - permissions
+
+Authorities: - id - election_id - authority_reference -
+key_share_reference - status
+
+8. SMART CONTRACT RESPONSIBILITIES
+
+The smart contract should be kept relatively small.
+
+Potential responsibilities:
+
+-   Register/activate election
+-   Store election state
+-   Lock election configuration
+-   Accept authorized vote commitments/records
+-   Prevent duplicate transaction/credential use where appropriate
+-   Store relevant hashes
+-   Store Merkle root or finalized cryptographic commitment
+-   Record important election events
+-   Support final verification data
+
+The smart contract should NOT contain:
+
+-   Voter passwords
+-   Voter names
+-   Email addresses
+-   Plaintext candidate choices
+-   Other personally identifiable information
+
+Large/private data should remain off-chain, with the blockchain storing
+cryptographic references, commitments, hashes, and verification data.
+
+9. IMPLEMENTATION PLAN
+
+PHASE 1 - Project Foundation ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Repository and development environment
+2.  Frontend application
+3.  Backend API
+4.  PostgreSQL database
+5.  Basic authentication
+6.  Role-based access
+
+Roles:
+
+-   Voter
+-   Admin
+-   Observer
+-   Election authority
+
+PHASE 2 - Election Management ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Election creation
+2.  Candidate management
+3.  Voter registration
+4.  Election lifecycle
+5.  Admin dashboard
+6.  Observer dashboard
+
+PHASE 3 - Basic Voting ~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Voter dashboard
+2.  Candidate selection
+3.  One-person-one-vote
+4.  Vote submission
+5.  Vote counting
+6.  Result dashboard
+
+At the end of Phase 3, there should be a complete working non-blockchain
+prototype.
+
+PHASE 4 - Blockchain Integration ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Solidity smart contract
+2.  Local Ethereum-compatible blockchain
+3.  Backend blockchain service
+4.  Vote transaction submission
+5.  Transaction hash storage
+6.  Block confirmation
+7.  Blockchain verification page
+
+At the end of Phase 4, votes should generate real blockchain
+transactions in the prototype environment.
+
+PHASE 5 - Privacy Layer ~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Identity/vote separation
+2.  Anonymous voting credentials
+3.  Vote encryption
+4.  Cryptographic commitments
+5.  Privacy-preserving receipt
+6.  Anonymous vote verification
+
+This phase changes the project from a basic blockchain voting
+application into a privacy-focused voting prototype.
+
+PHASE 6 - Cryptographic Verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Merkle tree
+2.  Merkle root generation
+3.  Merkle proof generation
+4.  Merkle proof verification
+5.  Public election integrity dashboard
+
+The goal is to allow independent verification of the election ledger.
+
+PHASE 7 - Zero-Knowledge Verification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Define a ZK circuit/proof statement
+2.  Prove that a vote is valid
+3.  Verify the proof
+4.  Integrate proof verification with the vote submission flow
+
+Start with a simple statement such as:
+
+    "This encrypted vote represents one valid candidate selection."
+
+Do not attempt to build a complete national-election-grade ZK protocol
+as the first implementation.
+
+PHASE 8 - Multi-Authority Tally ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Multiple election authority accounts
+2.  Key-share/threshold mechanism
+3.  Authorization threshold
+4.  Tally authorization workflow
+5.  Audit events for each authority action
+
+Example:
+
+    3 of 5 authorities required
+    before final tally is authorized.
+
+PHASE 9 - Public Transparency ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build:
+
+1.  Real-time election status
+2.  Non-sensitive vote count
+3.  Blockchain status
+4.  Integrity status
+5.  Public verification
+6.  Proof of Election QR code
+
+PHASE 10 - Fault and Security Demonstrations
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Build controlled demonstration modules:
+
+1.  Network failure
+2.  Pending transaction
+3.  Transaction recovery
+4.  Duplicate vote attempt
+5.  Tampered record
+6.  Invalid transaction
+7.  Invalid proof
+8.  Unauthorized admin action
+
+These demonstrations should operate in a controlled test environment and
+should not be presented as evidence that a production election is
+secure.
+
+10. COMPLETE VOTING FLOW
+
+The intended final demonstration flow is:
+
+    1. Admin creates election
+             |
+             v
+    2. Admin adds candidates
+             |
+             v
+    3. Admin registers voters
+             |
+             v
+    4. Election becomes ACTIVE
+             |
+             v
+    5. Voter authenticates
+             |
+             v
+    6. Anonymous voting credential is used
+             |
+             v
+    7. Voter selects candidate
+             |
+             v
+    8. Vote is encrypted
+             |
+             v
+    9. Validity proof is generated
+             |
+             v
+
+10. Vote commitment/record is submitted | v
+
+11. Blockchain transaction is confirmed | v
+
+12. Voter receives receipt + transaction reference | v
+
+13. Voter verifies anonymous vote record | v
+
+14. Public observer verifies ledger | v
+
+15. Election closes | v
+
+16. Authorities authorize final tally | v
+
+17. Votes are tallied | v
+
+18. Merkle root / verification data finalized | v
+
+19. Results published | v
+
+20. Proof of Election QR is generated | v
+
+21. Public independently verifies election
+
+22. SECURITY PRINCIPLES
+
+VoteChain should follow these principles:
+
+1.  Never store plaintext voter choices on a public blockchain.
+
+2.  Never store passwords on the blockchain.
+
+3.  Do not put personally identifiable voter data on-chain.
+
+4.  Separate voter authentication from vote selection.
+
+5.  Use established cryptographic libraries.
+
+6.  Hash passwords using Argon2id or bcrypt.
+
+7.  Validate and authorize every backend operation.
+
+8.  Treat the blockchain as an audit/verification layer, not as a
+    complete election-security solution.
+
+9.  Protect private keys and authority key shares.
+
+10. Make election configuration immutable after the appropriate lock
+    point.
+
+11. Maintain audit logs for security-sensitive actions.
+
+12. Test duplicate voting, replay, invalid votes, unauthorized access,
+    tampering, and network failure.
+
+13. Keep the prototype’s limitations clearly documented.
+
+14. PROJECT DEMONSTRATION SCENARIO
+
+A strong final demonstration can use a small election with approximately
+10-20 test voters.
+
+Demo sequence:
+
+1.  Admin logs in.
+
+2.  Admin creates “Student Council Election 2026.”
+
+3.  Admin adds three candidates.
+
+4.  Admin registers test voters.
+
+5.  Election becomes ACTIVE.
+
+6.  Voter logs in.
+
+7.  Voter selects a candidate.
+
+8.  Vote is encrypted.
+
+9.  Cryptographic proof is generated.
+
+10. Blockchain transaction is created.
+
+11. Voter receives transaction hash and receipt.
+
+12. Voter verifies the vote anonymously.
+
+13. Public observer checks the integrity dashboard.
+
+14. Demonstrate a second voting attempt and show rejection.
+
+15. Demonstrate a controlled record-tampering test and show detection.
+
+16. Demonstrate a network interruption and pending transaction.
+
+17. Close the election.
+
+18. Election authorities authorize the tally.
+
+19. Publish the final result.
+
+20. Generate the Proof of Election QR.
+
+21. Scan QR and open the public verification page.
+
+22. SUGGESTED PROJECT TEAM DIVISION
+
+For a team of 4:
+
+Member 1: - Frontend - Voter dashboard - Admin dashboard - Public
+verification UI
+
+Member 2: - Backend - Database - Authentication - Election management -
+APIs
+
+Member 3: - Blockchain - Solidity smart contract - Transaction
+processing - Merkle tree - Blockchain verification
+
+Member 4: - Cryptography - Encryption - Anonymous credentials - ZK proof
+module - Multi-authority mechanism - Security testing
+
+All members should contribute to testing, documentation, and
+integration.
+
+14. RECOMMENDED DEVELOPMENT ORDER
+
+Do NOT start with zero-knowledge proofs or multi-authority decryption.
+
+Recommended order:
+
+    Authentication
+        ↓
+    Election management
+        ↓
+    Basic voting
+        ↓
+    One-person-one-vote
+        ↓
+    Database-backed results
+        ↓
+    Blockchain integration
+        ↓
+    Encryption
+        ↓
+    Secret ballot / identity separation
+        ↓
+    Receipts and public verification
+        ↓
+    Merkle verification
+        ↓
+    Multi-authority tally
+        ↓
+    Zero-knowledge validation
+        ↓
+    Offline/failure demonstrations
+        ↓
+    Final security testing
+
+This order ensures there is always a working version of VoteChain while
+advanced features are being developed.
+
+15. EXPECTED FINAL PRODUCT
+
+VoteChain should provide three major user experiences:
+
+A. VOTER
+
+-   Register/authenticate
+-   View active election
+-   View candidates
+-   Cast one vote
+-   Receive encrypted/anonymous receipt
+-   Verify vote inclusion
+-   Access election proof
+
+B. ADMINISTRATOR
+
+-   Manage voters
+-   Create elections
+-   Manage candidates
+-   Start/close elections
+-   Monitor participation
+-   View audit logs
+-   Manage authorities
+-   Authorize tally according to threshold rules
+-   Publish results
+
+C. PUBLIC / OBSERVER
+
+-   View election status
+-   Verify blockchain records
+-   Verify Merkle root
+-   Verify election integrity
+-   View audit/verification information
+-   Verify Proof of Election QR
+-   View final published results
+
+16. PROJECT USP
+
+VoteChain’s main differentiator is that it does not treat blockchain as
+the entire voting solution.
+
+The project demonstrates several layers working together:
+
+    Identity
+       +
+    Authentication
+       +
+    Privacy
+       +
+    Encryption
+       +
+    Zero-Knowledge Validation
+       +
+    Blockchain Auditability
+       +
+    Merkle Verification
+       +
+    Multi-Authority Control
+       +
+    Public Transparency
+       =
+    VoteChain
+
+The central project question is:
+
+    "How can an electronic election be publicly verifiable while keeping
+     individual voting choices private?"
+
+VoteChain attempts to demonstrate an answer using modern application
+security, cryptography, blockchain technology, and verifiable election
+workflows.
+
+17. IMPORTANT PROJECT LIMITATIONS
+
+VoteChain is a prototype and should not claim to provide the security of
+a certified real-world election system.
+
+Important limitations to document:
+
+-   A blockchain cannot guarantee that a voter’s device was not
+    compromised.
+-   Encryption does not automatically solve voter coercion.
+-   Anonymous credentials require careful cryptographic design.
+-   Zero-knowledge systems require formal circuit/protocol design and
+    testing.
+-   Multi-authority cryptography requires secure key management.
+-   Offline voting introduces significant security and consistency
+    challenges.
+-   A smart contract cannot independently guarantee that the original
+    voter intent was correctly captured.
+-   Real elections require extensive independent security audits and
+    certification.
+
+18. FINAL SUMMARY
+
+VoteChain is a full-stack privacy-preserving electronic voting prototype
+built around the combination of:
+
+    React / Next.js
+    Node.js / TypeScript
+    PostgreSQL
+    Solidity
+    Ethereum-compatible blockchain
+    Smart contracts
+    Encryption
+    Digital signatures
+    Anonymous credentials
+    Zero-knowledge proofs
+    Merkle trees
+    Threshold cryptography
+    QR-based verification
+    Role-based access control
+    Audit logging
+
+The recommended implementation strategy is incremental:
+
+    Build the normal election system first,
+    add blockchain second,
+    add privacy and encryption third,
+    add cryptographic verification fourth,
+    and finally integrate advanced ZK and multi-authority features.
+
+The result should be a working, demonstrable research prototype in which
+a voter can cast a private vote, receive a verifiable receipt, the
+election can maintain a tamper-evident ledger, observers can
+independently verify the election data, and sensitive tally operations
+can require multiple authorized parties.

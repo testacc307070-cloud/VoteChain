@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: votechain
+      POSTGRES_PASSWORD: votechain_dev
+      POSTGRES_DB: votechain
+    ports:
+      - "5432:5432"
+    volumes:
+      - votechain-postgres:/var/lib/postgresql/data
+
+volumes:
+  votechain-postgres:

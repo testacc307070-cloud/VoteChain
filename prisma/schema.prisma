@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  VOTER
+  ADMIN
+  OBSERVER
+  AUTHORITY
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum ElectionStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  CLOSED
+  RESULTS_PUBLISHED
+}
+
+model User {
+  id                 String                 @id @default(cuid())
+  voterId            String?                @unique
+  name               String
+  email              String                 @unique
+  passwordHash       String
+  role               UserRole               @default(VOTER)
+  status             UserStatus             @default(ACTIVE)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  createdElections   Election[]             @relation("ElectionCreator")
+  votes              ElectionVote[]         @relation("UserVotes")
+
+  @@index([role, status])
+}
+
+model Election {
+  id                 String                     @id @default(cuid())
+  name               String
+  description        String                     @default("")
+  startTime          DateTime
+  endTime            DateTime
+  status             ElectionStatus             @default(DRAFT)
+  candidatesLocked   Boolean                    @default(false)
+  eligibleVoterIds   String[]                   @default([])
+  resultsPublishedAt DateTime?
+  createdById        String
+  createdBy          User                       @relation("ElectionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  candidates         ElectionCandidate[]
+  votes              ElectionVote[]
+  blocks             ElectionBlockchainBlock[]
+  authorityApprovals ElectionAuthorityApproval[]
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  @@index([status, startTime])
+  @@index([createdById, createdAt])
+}
+
+model ElectionCandidate {
+  id          String        @id @default(cuid())
+  electionId  String
+  name        String
+  description String        @default("")
+  sortOrder   Int           @default(0)
+  election    Election      @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  votes       ElectionVote[]
+  createdAt   DateTime      @default(now())
+
+  @@unique([electionId, name])
+  @@index([electionId, sortOrder])
+}
+
+model ElectionVote {
+  id          String            @id @default(cuid())
+  electionId  String
+  election    Election          @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  voterId     String
+  voter       User              @relation("UserVotes", fields: [voterId], references: [id], onDelete: Restrict)
+  candidateId String
+  candidate   ElectionCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  receiptId   String            @unique
+  txHash      String            @unique
+  encryptedBallot String
+  ballotNonce String
+  ballotAuthTag String
+  ballotProof String
+  blockNumber Int               @default(1)
+  submittedAt DateTime          @default(now())
+
+  @@unique([electionId, voterId])
+  @@index([electionId, submittedAt])
+}
+
+model ElectionBlockchainBlock {
+  id          String   @id @default(cuid())
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  index       Int
+  previousHash String
+  payload     String
+  hash        String   @unique
+  timestamp   DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([electionId, index])
+  @@index([electionId, index])
+}
+
+model ElectionAuthorityApproval {
+  id          String   @id @default(cuid())
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  authorityId String
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([electionId, authorityId])
+  @@index([electionId, approved])
+}
