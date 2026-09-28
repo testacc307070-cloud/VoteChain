@@ -75,6 +75,8 @@ npm ci
 Copy-Item .env.example .env
 ```
 
+`npm ci` generates the Prisma Client as part of installation.
+
 `.env.example` contains local-only DEMO settings that match the credentials below. It is safe for this local prototype, but its sample secrets and passwords must never be reused for a real deployment. `.env` is ignored by Git.
 
 ### Start PostgreSQL
