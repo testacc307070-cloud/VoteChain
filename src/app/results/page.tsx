@@ -1,24 +1,33 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { createElectionAuditDigest, summarizeElectionResults } from "@/lib/election-results";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { buildElectionIntegritySnapshot } from "@/lib/integrity";
 import { evaluateAuthorityThreshold, stringifyAuthorityStatus } from "@/lib/authority";
 import { buildElectionQrReference } from "@/lib/qr";
 import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
 import QrCode from "@/components/qr-code";
+import TamperDemo from "@/components/tamper-demo";
 
 export default async function ResultsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
 
   const elections = await prisma.election.findMany({
     where: { status: { in: ["CLOSED", "RESULTS_PUBLISHED"] } },
     include: {
       candidates: { orderBy: { sortOrder: "asc" } },
-      votes: { select: { candidateId: true } },
+      votes: {
+        select: {
+          candidateId: true,
+          voterId: true,
+          encryptedBallot: true,
+          ballotNonce: true,
+          ballotAuthTag: true,
+          ballotProof: true,
+        },
+      },
       blocks: { orderBy: { index: "asc" } },
+      authorityApprovals: true,
     },
     orderBy: [{ updatedAt: "desc" }],
   });
@@ -26,19 +35,29 @@ export default async function ResultsPage() {
   return (
     <main className="portal-shell">
       <header className="portal-header">
-        <Link className="brand" href={user.role === "ADMIN" ? "/" : "/portal"} aria-label="VoteChain home">
+        <Link className="brand" href={user ? (user.role === "ADMIN" ? "/" : "/portal") : "/login"} aria-label="VoteChain home">
           <span className="brand-mark"><span /><span /><span /></span>
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
-        <form action="/api/auth/logout" method="post">
-          <button className="portal-signout" type="submit">Sign out</button>
-        </form>
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          {user ? (
+            <form action="/api/auth/logout" method="post">
+              <button className="portal-signout" type="submit">Sign out</button>
+            </form>
+          ) : (
+            <Link href="/login" className="secondary-button" style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}>
+              Sign in
+            </Link>
+          )}
+        </div>
       </header>
 
       <section className="portal-content">
         <p className="eyebrow">VERIFICATION / RESULT WINDOW</p>
         <h1>Public integrity dashboard</h1>
-        <p className="page-subtitle">Election results are published as anonymized totals with a public audit digest and Merkle-based integrity record.</p>
+        <p className="page-subtitle">
+          Election results are published as anonymized totals with a public audit digest, Merkle-based integrity record, and multi-authority threshold verification.
+        </p>
 
         {elections.length === 0 ? (
           <div className="election-empty">
@@ -48,16 +67,19 @@ export default async function ResultsPage() {
         ) : (
           <div className="election-record-list" style={{ marginTop: "2rem" }}>
             {elections.map((election) => {
-              const summary = summarizeElectionResults(
+              const summary = summarizeStoredElectionResults(
+                election.id,
                 election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
                 election.votes,
               );
+
               const digest = createElectionAuditDigest({
                 electionId: election.id,
                 totalVotes: summary.totalVotes,
                 candidateResults: summary.candidateResults,
                 publishedAt: election.resultsPublishedAt ?? new Date(),
               });
+
               const blockChain = election.blocks.map((block) => ({
                 index: block.index,
                 timestamp: block.timestamp.getTime(),
@@ -65,6 +87,7 @@ export default async function ResultsPage() {
                 payload: block.payload,
                 hash: block.hash,
               }));
+
               const blockchainSummary = buildBlockchainSummary(blockChain);
               const integrity = buildElectionIntegritySnapshot({
                 electionId: election.id,
@@ -73,21 +96,23 @@ export default async function ResultsPage() {
                 invalidVotes: 0,
                 blockHeight: blockchainSummary.blockCount,
               });
+
+              // Real authority approvals evaluated from database
               const authorityStatus = evaluateAuthorityThreshold(
-                [
-                  { authorityId: "A", approved: true },
-                  { authorityId: "B", approved: true },
-                  { authorityId: "C", approved: true },
-                  { authorityId: "D", approved: false },
-                  { authorityId: "E", approved: false },
-                ],
-                3,
+                election.authorityApprovals.map((a) => ({
+                  authorityId: a.authorityId,
+                  approved: a.approved,
+                  keyShare: a.keyShare,
+                })),
+                election.requiredAuthorityApprovals ?? 2,
               );
+
               const qrReference = buildElectionQrReference({
                 electionId: election.id,
                 status: election.status,
                 digest: digest,
               });
+
               return (
                 <article className="election-record" key={election.id}>
                   <div className="record-heading">
@@ -130,6 +155,17 @@ export default async function ResultsPage() {
                       <span className="candidate-readonly-name">Election verification reference<small>{qrReference}</small></span>
                     </div>
                   </div>
+
+                  {/* Interactive Tamper Demonstration */}
+                  <TamperDemo
+                    blocks={election.blocks.map((b) => ({
+                      index: b.index,
+                      hash: b.hash,
+                      previousHash: b.previousHash,
+                      payload: b.payload,
+                      timestamp: b.timestamp.toISOString(),
+                    }))}
+                  />
                 </article>
               );
             })}

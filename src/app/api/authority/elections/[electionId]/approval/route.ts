@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { ElectionStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { splitSecretToShares } from "@/lib/authority";
 
 export const runtime = "nodejs";
 
@@ -40,20 +42,65 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     return NextResponse.json({ error: "Authority approval is only available for closed elections." }, { status: 409 });
   }
 
-  await prisma.electionAuthorityApproval.upsert({
+  const existingApproval = await prisma.electionAuthorityApproval.findUnique({
     where: {
       electionId_authorityId: {
         electionId,
         authorityId: user.id,
       },
     },
-    update: { approved },
+  });
+
+  let keyShare = existingApproval?.keyShare ?? null;
+  if (approved && !keyShare) {
+    const masterKey = process.env.BALLOT_ENCRYPTION_KEY ?? "votechain-super-secret-ballot-key-32chars";
+    const authorities = await prisma.user.findMany({
+      where: { role: "AUTHORITY" },
+      orderBy: { createdAt: "asc" },
+    });
+    const authIndex = authorities.findIndex((a) => a.id === user.id);
+    const total = Math.max(authorities.length, 3);
+    const threshold = election.requiredAuthorityApprovals || 2;
+    const shares = splitSecretToShares(masterKey, total, threshold);
+    keyShare = shares[authIndex >= 0 ? authIndex : 0];
+  }
+
+  const updatedApproval = await prisma.electionAuthorityApproval.upsert({
+    where: {
+      electionId_authorityId: {
+        electionId,
+        authorityId: user.id,
+      },
+    },
+    update: {
+      approved,
+      ...(keyShare ? { keyShare } : {}),
+    },
     create: {
       electionId,
       authorityId: user.id,
       approved,
+      keyShare,
     },
   });
+
+  // Record append-only audit event
+  await prisma.auditLog.create({
+    data: {
+      eventType: approved ? "AUTHORITY_APPROVAL_GRANTED" : "AUTHORITY_REVIEW_FLAGGED",
+      actorReference: `authority:${user.email}`,
+      electionId,
+      details: approved
+        ? `Authority ${user.name} approved results and submitted key share (${keyShare ? "share attached" : "no share"}).`
+        : `Authority ${user.name} flagged election for review.`,
+      eventHash: createHash("sha256").update(`${electionId}:${user.id}:${approved}:${Date.now()}`).digest("hex"),
+    },
+  });
+
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return NextResponse.json({ ok: true, approval: updatedApproval });
+  }
 
   return NextResponse.redirect(new URL("/authority", request.url));
 }

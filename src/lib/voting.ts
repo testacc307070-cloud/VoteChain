@@ -15,12 +15,10 @@ export type VoteReceipt = {
   receiptId: string;
   electionId: string;
   voteId: string;
-  candidateId: string;
   recordHash: string;
   txHash: string;
   blockNumber: number;
   submittedAt: string;
-  maskedBallot: string;
 };
 
 export function validateVoteSubmission({
@@ -51,17 +49,14 @@ export function validateVoteSubmission({
 export function createVoteReceipt({
   electionId,
   voteId,
-  candidateId,
   submittedAt,
 }: {
   electionId: string;
   voteId: string;
-  candidateId: string;
   submittedAt: Date;
 }): VoteReceipt {
-  const base = `${electionId}:${voteId}:${candidateId}:${submittedAt.toISOString()}`;
+  const base = `${electionId}:${voteId}:${submittedAt.toISOString()}`;
   const recordHash = createHash("sha256").update(base).digest("hex");
-  const candidateFingerprint = createHash("sha256").update(candidateId).digest("hex").slice(0, 12);
   const txHash = `0x${recordHash.slice(0, 32)}`;
   const blockNumber = Number.parseInt(recordHash.slice(0, 8), 16) % 900000 + 1;
 
@@ -69,30 +64,26 @@ export function createVoteReceipt({
     receiptId: `RCPT-${recordHash.slice(0, 12).toUpperCase()}`,
     electionId,
     voteId,
-    candidateId,
     recordHash,
     txHash,
     blockNumber,
     submittedAt: submittedAt.toISOString(),
-    maskedBallot: `candidate:${candidateFingerprint}`,
   };
 }
 
 export function verifyVoteReceipt({
   electionId,
   voteId,
-  candidateId,
   submittedAt,
   recordHash,
 }: {
   electionId: string;
   voteId: string;
-  candidateId: string;
   submittedAt: Date;
   recordHash: string;
 }) {
   const expectedHash = createHash("sha256")
-    .update(`${electionId}:${voteId}:${candidateId}:${submittedAt.toISOString()}`)
+    .update(`${electionId}:${voteId}:${submittedAt.toISOString()}`)
     .digest("hex");
 
   return expectedHash === recordHash;

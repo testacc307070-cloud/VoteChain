@@ -36,11 +36,10 @@ test("rejects invalid candidate choices and duplicate votes", () => {
   assert.equal(duplicateVote.ok ? "" : duplicateVote.error.includes("already voted"), true);
 });
 
-test("creates a verifiable ballot receipt without exposing the selected choice", () => {
+test("creates a verifiable receipt that does not depend on the selected choice", () => {
   const receipt = createVoteReceipt({
     electionId: "election-123",
     voteId: "vote-456",
-    candidateId: "cand-2",
     submittedAt: new Date("2026-09-26T12:00:00.000Z"),
   });
 
@@ -49,15 +48,13 @@ test("creates a verifiable ballot receipt without exposing the selected choice",
   assert.equal(receipt.recordHash.length >= 24, true);
   assert.equal(receipt.txHash.startsWith("0x"), true);
   assert.equal(receipt.blockNumber > 0, true);
-  assert.equal(receipt.maskedBallot.includes("cand-2"), false);
-  assert.equal(receipt.maskedBallot.startsWith("candidate:"), true);
+  assert.equal(JSON.stringify(receipt).includes("cand-2"), false);
 });
 
 test("verifies a valid receipt hash from ballot metadata", () => {
   const receipt = createVoteReceipt({
     electionId: "election-123",
     voteId: "vote-456",
-    candidateId: "cand-2",
     submittedAt: new Date("2026-09-26T12:00:00.000Z"),
   });
 
@@ -65,7 +62,6 @@ test("verifies a valid receipt hash from ballot metadata", () => {
     verifyVoteReceipt({
       electionId: receipt.electionId,
       voteId: receipt.voteId,
-      candidateId: receipt.candidateId,
       submittedAt: new Date(receipt.submittedAt),
       recordHash: receipt.recordHash,
     }),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -20,6 +20,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  UserPlus,
   UsersRound,
   Vote,
   X,
@@ -33,46 +34,155 @@ const navigation = [
   { label: "Audit trail", icon: ClipboardList, href: "/audit" },
 ];
 
-const activities = [
-  { time: "10:42:18", title: "Election configuration locked", detail: "Student Council · 3 candidates", tag: "ADMIN", color: "green" },
-  { time: "10:38:51", title: "Observer access granted", detail: "M. Chen · read-only role", tag: "ACCESS", color: "blue" },
-  { time: "10:31:06", title: "Integrity check completed", detail: "Demo ledger · all records match", tag: "CHECK", color: "orange" },
-];
+export type UserItem = {
+  id: string;
+  voterId: string | null;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  createdAt: string;
+};
 
-type DashboardProps = { displayName: string; role: string };
+export type DashboardMetrics = {
+  votersCount: number;
+  activeElectionsCount: number;
+  totalVotes: number;
+  participationRate: number;
+  activeElection: {
+    id: string;
+    name: string;
+    description: string;
+    candidatesCount: number;
+    candidates: Array<{ id: string; name: string; description: string; sortOrder: number }>;
+    votesCount: number;
+    endTime: string;
+  } | null;
+};
 
-export default function DashboardClient({ displayName, role }: DashboardProps) {
+export type ActivityItem = {
+  time: string;
+  title: string;
+  detail: string;
+  tag: string;
+  color: string;
+};
+
+type DashboardProps = {
+  displayName: string;
+  role: string;
+  metrics: DashboardMetrics;
+  recentActivities: ActivityItem[];
+  initialUsers: UserItem[];
+};
+
+export default function DashboardClient({
+  displayName,
+  role,
+  metrics,
+  recentActivities,
+  initialUsers,
+}: DashboardProps) {
   const router = useRouter();
   const [activeNav, setActiveNav] = useState("Overview");
   const [noticeOpen, setNoticeOpen] = useState(true);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-  const initials = displayName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+  const [users, setUsers] = useState<UserItem[]>(initialUsers);
+  const [showVoterModal, setShowVoterModal] = useState(false);
+  const [voterFormSubmitting, setVoterFormSubmitting] = useState(false);
+  const [voterFormError, setVoterFormError] = useState("");
+  const [voterFormSuccess, setVoterFormSuccess] = useState("");
+
+  const initials = displayName
+    .split(/\s+/)
+    .map((part) => part[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   async function signOut() {
     await fetch("/api/auth/logout", { method: "POST" });
     router.replace("/login");
   }
 
+  async function handleRegisterVoter(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setVoterFormError("");
+    setVoterFormSuccess("");
+    setVoterFormSubmitting(true);
+    const form = new FormData(e.currentTarget);
+
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.get("name"),
+          email: form.get("email"),
+          voterId: form.get("voterId"),
+          password: form.get("password"),
+          role: form.get("role") || "VOTER",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to register voter.");
+
+      setUsers((prev) => [data.user, ...prev]);
+      setVoterFormSuccess(`Registered ${data.user.name} (${data.user.email}) successfully!`);
+      e.currentTarget.reset();
+    } catch (err) {
+      setVoterFormError(err instanceof Error ? err.message : "Error creating voter.");
+    } finally {
+      setVoterFormSubmitting(false);
+    }
+  }
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
-        <a className="brand" href="#overview" aria-label="VoteChain home">
+        <Link className="brand" href="/" aria-label="VoteChain home">
           <span className="brand-mark"><span /><span /><span /></span>
           <span>votechain<span className="brand-period">.</span></span>
-        </a>
+        </Link>
         <div className="workspace-switcher">
-          <span className="workspace-icon">SC</span>
-          <span className="workspace-copy"><strong>Student Council</strong><small>Demo workspace</small></span>
+          <span className="workspace-icon">VC</span>
+          <span className="workspace-copy"><strong>VoteChain Admin</strong><small>Security Console</small></span>
           <ChevronDown size={15} aria-hidden="true" />
         </div>
         <p className="nav-label">WORKSPACE</p>
         <nav className="primary-nav" aria-label="Main navigation">
           {navigation.map(({ label, icon: Icon, href }) => {
             const className = `nav-item ${activeNav === label ? "nav-active" : ""}`;
-            const content = <><Icon size={17} strokeWidth={1.8} aria-hidden="true" /><span>{label}</span></>;
-            return href
-              ? <Link key={label} className={className} href={href} onClick={() => { setActiveNav(label); setMobileNavOpen(false); }}>{content}</Link>
-              : <button key={label} className={className} onClick={() => { setActiveNav(label); setMobileNavOpen(false); }}>{content}</button>;
+            const content = (
+              <>
+                <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
+                <span>{label}</span>
+              </>
+            );
+            return href ? (
+              <Link
+                key={label}
+                className={className}
+                href={href}
+                onClick={() => {
+                  setActiveNav(label);
+                  setMobileNavOpen(false);
+                }}
+              >
+                {content}
+              </Link>
+            ) : (
+              <button
+                key={label}
+                className={className}
+                onClick={() => {
+                  setActiveNav(label);
+                  setMobileNavOpen(false);
+                }}
+              >
+                {content}
+              </button>
+            );
           })}
         </nav>
         <div className="sidebar-bottom">
@@ -95,81 +205,219 @@ export default function DashboardClient({ displayName, role }: DashboardProps) {
             <button className="search-button" aria-label="Search"><Search size={16} /><span>Search</span><kbd>⌘ K</kbd></button>
             <button className="icon-button notification-button" title="Notifications" aria-label="Notifications"><Bell size={18} /><i /></button>
             <span className="topbar-divider" />
-            <div className="topbar-date"><span className="live-dot" /> DEMO ENVIRONMENT</div>
+            <div className="topbar-date"><span className="live-dot" /> LIVE SYSTEM</div>
           </div>
         </header>
 
         <div className="content-wrap">
-          <div className="page-heading">
-            <div>
-              <p className="eyebrow">SATURDAY, SEPTEMBER 26, 2026 <span>•</span> ADMIN CONSOLE</p>
-              <h1>Election overview</h1>
-              <p className="page-subtitle">Phase 3 status: voting lifecycle, receipts, verification, and audit trail are active.</p>
+          {activeNav === "Voters" ? (
+            /* Voter Management Tab */
+            <div style={{ marginTop: "1rem" }}>
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">ADMINISTRATION / SECTION 3.1</p>
+                  <h1>Voter Registration Register</h1>
+                  <p className="page-subtitle">Register and manage eligible voters with Voter ID, email, and role authorization.</p>
+                </div>
+                <button className="primary-button" onClick={() => setShowVoterModal(!showVoterModal)}>
+                  <UserPlus size={16} /> {showVoterModal ? "Close Form" : "Register New Voter"}
+                </button>
+              </div>
+
+              {showVoterModal && (
+                <div className="election-create-panel" style={{ marginTop: "1.5rem" }}>
+                  <div className="form-section-heading">
+                    <div>
+                      <span className="panel-kicker">NEW VOTER ENROLLMENT</span>
+                      <h2>Add eligible voter account</h2>
+                    </div>
+                  </div>
+                  {voterFormError && <div className="election-feedback feedback-error">{voterFormError}</div>}
+                  {voterFormSuccess && <div className="election-feedback feedback-success">{voterFormSuccess}</div>}
+                  <form className="election-form" onSubmit={handleRegisterVoter}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                      <label className="field-block">
+                        <span>Full Name</span>
+                        <input name="name" required minLength={2} placeholder="e.g. Eleanor Vance" />
+                      </label>
+                      <label className="field-block">
+                        <span>Voter ID</span>
+                        <input name="voterId" required placeholder="e.g. VTR-2026-089" />
+                      </label>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                      <label className="field-block">
+                        <span>Email Address</span>
+                        <input name="email" type="email" required placeholder="e.g. eleanor@college.edu" />
+                      </label>
+                      <label className="field-block">
+                        <span>Password (min 8 chars)</span>
+                        <input name="password" type="password" required minLength={8} placeholder="••••••••••••" />
+                      </label>
+                    </div>
+                    <label className="field-block">
+                      <span>Role</span>
+                      <select name="role" defaultValue="VOTER" style={{ background: "transparent", color: "inherit", padding: "0.5rem", borderRadius: "4px" }}>
+                        <option value="VOTER">VOTER (Eligible Ballot Cast)</option>
+                        <option value="OBSERVER">OBSERVER (Read-Only Audit Monitor)</option>
+                        <option value="AUTHORITY">AUTHORITY (Key Share Trustee)</option>
+                      </select>
+                    </label>
+                    <div className="election-form-footer">
+                      <span>Password will be securely hashed with Bcrypt (cost factor 12).</span>
+                      <button className="primary-button" type="submit" disabled={voterFormSubmitting}>
+                        {voterFormSubmitting ? "Enrolling..." : "Enroll Voter"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              )}
+
+              <div className="election-record-list" style={{ marginTop: "2rem" }}>
+                <div className="election-list-heading">
+                  <div>
+                    <h2>Enrolled Voters & Users</h2>
+                    <p>{users.length} total enrolled accounts</p>
+                  </div>
+                </div>
+                <div className="record-candidates" style={{ marginTop: "1rem" }}>
+                  {users.map((u) => (
+                    <div key={u.id} className="candidate-readonly" style={{ justifyContent: "space-between" }}>
+                      <div>
+                        <strong>{u.name}</strong> <small>({u.email})</small>
+                        <div style={{ fontSize: "0.75rem", color: "var(--muted, #888)", marginTop: "0.2rem" }}>
+                          Voter ID: <code>{u.voterId || "N/A"}</code> · Role: <strong>{u.role}</strong>
+                        </div>
+                      </div>
+                      <span className="election-status status-active">
+                        <i />{u.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <button className="primary-button" onClick={() => router.push("/elections")}><Plus size={17} /> Create election</button>
-          </div>
-
-          {noticeOpen && <div className="prototype-notice">
-            <div className="notice-icon"><Fingerprint size={18} /></div>
-            <p><strong>Research prototype</strong><span> Demo data only. This app does not accept or store real ballots.</span></p>
-            <button className="icon-button notice-close" aria-label="Dismiss notice" title="Dismiss notice" onClick={() => setNoticeOpen(false)}><X size={16} /></button>
-          </div>}
-
-          <section className="metrics-grid" aria-label="Election metrics">
-            <article className="metric-panel metric-primary">
-              <div className="metric-top"><span>ACTIVE ELECTION</span><span className="status-pill"><i /> LIVE DEMO</span></div>
-              <h2>Student Council<br />Election 2026</h2>
-              <div className="metric-foot"><span>Closes today at 5:00 PM</span><button onClick={() => setActiveNav("Elections")}>View election <ArrowUpRight size={14} /></button></div>
-              <div className="panel-grid" aria-hidden="true" />
-            </article>
-            <article className="metric-panel">
-              <div className="metric-top"><span>PARTICIPATION</span><span className="metric-icon green-icon"><UsersRound size={17} /></span></div>
-              <div className="metric-value">68<span className="metric-unit">%</span></div>
-              <div className="metric-change"><span className="change-up"><ArrowUpRight size={14} /> 8.2%</span><span>vs. eligible voters</span></div>
-              <div className="progress-track"><span style={{ width: "68%" }} /></div>
-              <div className="metric-foot"><span>1,284 of 1,888 voters</span><span className="subtle-label">DEMO</span></div>
-            </article>
-            <article className="metric-panel">
-              <div className="metric-top"><span>LEDGER INTEGRITY</span><span className="metric-icon blue-icon"><ShieldCheck size={17} /></span></div>
-              <div className="integrity-value"><span className="integrity-check"><Check size={18} /></span><span>Verified</span></div>
-              <div className="integrity-caption">All demo records match their<br />recorded hashes.</div>
-              <div className="metric-foot"><span>Last checked 2 min ago</span><button onClick={() => setActiveNav("Ledger")}>Inspect <ArrowUpRight size={14} /></button></div>
-            </article>
-          </section>
-
-          <section className="section-heading">
-            <div><h2>Election activity</h2><p>Manage the current election and review recent events.</p></div>
-            <button className="text-button" onClick={() => setActiveNav("Audit trail")}>View audit trail <ArrowUpRight size={15} /></button>
-          </section>
-
-          <div className="lower-grid">
-            <section className="election-panel">
-              <div className="panel-header"><div><span className="panel-kicker">CURRENT ELECTION</span><h3>Student Council Election 2026</h3></div><span className="status-pill status-open"><i /> ACTIVE</span></div>
-              <div className="election-meta"><span><span className="meta-label">ELECTION ID</span><code>SC-2026-01</code></span><span><span className="meta-label">CANDIDATES</span><strong>03</strong></span><span><span className="meta-label">ELIGIBLE VOTERS</span><strong>1,888</strong></span></div>
-              <div className="election-progress-label"><span>Participation</span><strong>68%</strong></div>
-              <div className="progress-track election-progress"><span style={{ width: "68%" }} /></div>
-              <div className="candidate-list">
-                <div className="candidate-row"><span className="candidate-avatar candidate-one">JM</span><span className="candidate-name">Jordan Miller<small>Community first</small></span><span className="candidate-index">01</span></div>
-                <div className="candidate-row"><span className="candidate-avatar candidate-two">RK</span><span className="candidate-name">Riley Kim<small>Better campus, together</small></span><span className="candidate-index">02</span></div>
-                <div className="candidate-row"><span className="candidate-avatar candidate-three">AS</span><span className="candidate-name">Avery Singh<small>Listen. Build. Deliver.</small></span><span className="candidate-index">03</span></div>
+          ) : (
+            /* Main Dashboard Overview */
+            <>
+              <div className="page-heading">
+                <div>
+                  <p className="eyebrow">ONLINE VOTING PROTOTYPE <span>•</span> SYSTEM CONSOLE</p>
+                  <h1>Election overview</h1>
+                  <p className="page-subtitle">Real-time cryptographic auditability, zero-knowledge verification, and blockchain commitments.</p>
+                </div>
+                <button className="primary-button" onClick={() => router.push("/elections")}><Plus size={17} /> Create election</button>
               </div>
-              <button className="panel-link" onClick={() => setActiveNav("Elections")}>Open election details <ArrowUpRight size={15} /></button>
-            </section>
 
-            <section className="activity-panel">
-              <div className="activity-heading"><div><span className="panel-kicker">SYSTEM LOG</span><h3>Recent activity</h3></div><button className="icon-button" aria-label="Activity options" title="Activity options"><ChevronDown size={16} /></button></div>
-              <div className="activity-list">
-                {activities.map((activity) => <article className="activity-row" key={activity.time}>
-                  <span className={`activity-marker marker-${activity.color}`} />
-                  <div className="activity-copy"><span className="activity-time">{activity.time} <i>{activity.tag}</i></span><strong>{activity.title}</strong><span className="activity-detail">{activity.detail}</span></div>
-                </article>)}
+              {noticeOpen && (
+                <div className="prototype-notice">
+                  <div className="notice-icon"><Fingerprint size={18} /></div>
+                  <p><strong>VoteChain Online Voting Prototype</strong><span> Cryptographic privacy-preserving voting engine with true ZK proofs, threshold decryption, and Ethereum auditability.</span></p>
+                  <button className="icon-button notice-close" aria-label="Dismiss notice" title="Dismiss notice" onClick={() => setNoticeOpen(false)}><X size={16} /></button>
+                </div>
+              )}
+
+              <section className="metrics-grid" aria-label="Election metrics">
+                <article className="metric-panel metric-primary">
+                  <div className="metric-top"><span>ACTIVE ELECTION</span><span className="status-pill"><i /> LIVE</span></div>
+                  <h2>{metrics.activeElection?.name ?? "No Active Election"}</h2>
+                  <div className="metric-foot">
+                    <span>{metrics.activeElection ? `Closes: ${new Date(metrics.activeElection.endTime).toLocaleDateString()}` : "Create an election to begin"}</span>
+                    <button onClick={() => router.push("/elections")}>Manage <ArrowUpRight size={14} /></button>
+                  </div>
+                  <div className="panel-grid" aria-hidden="true" />
+                </article>
+
+                <article className="metric-panel">
+                  <div className="metric-top"><span>REGISTERED VOTERS</span><span className="metric-icon green-icon"><UsersRound size={17} /></span></div>
+                  <div className="metric-value">{metrics.votersCount}</div>
+                  <div className="metric-change">
+                    <span className="change-up"><ArrowUpRight size={14} /> {metrics.participationRate}%</span>
+                    <span>turnout rate</span>
+                  </div>
+                  <div className="progress-track"><span style={{ width: `${Math.min(100, metrics.participationRate)}%` }} /></div>
+                  <div className="metric-foot">
+                    <span>{metrics.totalVotes} total votes cast</span>
+                    <button onClick={() => setActiveNav("Voters")}>Voters <ArrowUpRight size={14} /></button>
+                  </div>
+                </article>
+
+                <article className="metric-panel">
+                  <div className="metric-top"><span>LEDGER INTEGRITY</span><span className="metric-icon blue-icon"><ShieldCheck size={17} /></span></div>
+                  <div className="integrity-value"><span className="integrity-check"><Check size={18} /></span><span>Verified</span></div>
+                  <div className="integrity-caption">Blockchain commitments &amp; Merkle roots validated.</div>
+                  <div className="metric-foot">
+                    <span>Ethereum contract active</span>
+                    <button onClick={() => router.push("/results")}>Inspect <ArrowUpRight size={14} /></button>
+                  </div>
+                </article>
+              </section>
+
+              <div className="lower-grid" style={{ marginTop: "2rem" }}>
+                <section className="election-panel">
+                  <div className="panel-header">
+                    <div>
+                      <span className="panel-kicker">CURRENT FOCUS</span>
+                      <h3>{metrics.activeElection ? metrics.activeElection.name : "System Standby"}</h3>
+                    </div>
+                    <span className="status-pill status-open"><i /> {metrics.activeElection ? "ACTIVE" : "STANDBY"}</span>
+                  </div>
+                  {metrics.activeElection ? (
+                    <>
+                      <div className="election-meta">
+                        <span><span className="meta-label">ELECTION ID</span><code>{metrics.activeElection.id.slice(0, 10)}...</code></span>
+                        <span><span className="meta-label">CANDIDATES</span><strong>{metrics.activeElection.candidatesCount.toString().padStart(2, "0")}</strong></span>
+                        <span><span className="meta-label">VOTES CAST</span><strong>{metrics.activeElection.votesCount}</strong></span>
+                      </div>
+                      <div className="candidate-list">
+                        {metrics.activeElection.candidates.map((candidate, idx) => (
+                          <div className="candidate-row" key={candidate.id}>
+                            <span className="candidate-avatar candidate-one">{(idx + 1).toString().padStart(2, "0")}</span>
+                            <span className="candidate-name">{candidate.name}<small>{candidate.description || "Candidate"}</small></span>
+                            <span className="candidate-index">#{idx + 1}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button className="panel-link" onClick={() => router.push("/elections")}>Open election manager <ArrowUpRight size={15} /></button>
+                    </>
+                  ) : (
+                    <div style={{ padding: "1.5rem 0", color: "var(--muted, #888)" }}>
+                      No election is currently in ACTIVE status. Use Elections to create and activate an election.
+                    </div>
+                  )}
+                </section>
+
+                <section className="activity-panel">
+                  <div className="activity-heading">
+                    <div><span className="panel-kicker">AUDIT LOG</span><h3>Recent system activity</h3></div>
+                  </div>
+                  <div className="activity-list">
+                    {recentActivities.length === 0 ? (
+                      <div style={{ padding: "1rem", color: "var(--muted, #888)" }}>No audit activity yet.</div>
+                    ) : (
+                      recentActivities.map((activity, i) => (
+                        <article className="activity-row" key={i}>
+                          <span className={`activity-marker marker-${activity.color}`} />
+                          <div className="activity-copy">
+                            <span className="activity-time">{activity.time} <i>{activity.tag}</i></span>
+                            <strong>{activity.title}</strong>
+                            <span className="activity-detail">{activity.detail}</span>
+                          </div>
+                        </article>
+                      ))
+                    )}
+                  </div>
+                  <button className="panel-link" onClick={() => router.push("/audit")}>View all activity <ArrowUpRight size={15} /></button>
+                  <div className="ledger-note"><LockKeyhole size={15} /><span>Audit events are cryptographically hashed and append-oriented.</span></div>
+                </section>
               </div>
-              <button className="panel-link" onClick={() => setActiveNav("Audit trail")}>View all activity <ArrowUpRight size={15} /></button>
-              <div className="ledger-note"><LockKeyhole size={15} /><span>Audit events are append-oriented in the planned system.</span></div>
-            </section>
-          </div>
 
-          <footer className="page-footer"><span>VOTECHAIN <i>·</i> PHASE 3 / VOTING & VERIFICATION</span><span>Built for research and demonstration <ArrowDownRight size={13} /></span></footer>
+              <footer className="page-footer">
+                <span>VOTECHAIN <i>·</i> FULL-STACK ONLINE VOTING PROTOTYPE</span>
+                <span>Privacy-Preserving Blockchain Electronic Voting System <ArrowDownRight size={13} /></span>
+              </footer>
+            </>
+          )}
         </div>
       </section>
     </main>

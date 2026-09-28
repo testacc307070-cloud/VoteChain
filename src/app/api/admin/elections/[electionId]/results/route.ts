@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-api";
-import { createElectionAuditDigest, summarizeElectionResults } from "@/lib/election-results";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
+import { evaluateAuthorityThreshold, reconstructSecretFromShares } from "@/lib/authority";
 
 export const runtime = "nodejs";
 
@@ -16,8 +17,16 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
       where: { id: electionId },
       include: {
         candidates: { orderBy: { sortOrder: "asc" } },
+        authorityApprovals: true,
         votes: {
-          select: { candidateId: true },
+          select: {
+            candidateId: true,
+            voterId: true,
+            encryptedBallot: true,
+            ballotNonce: true,
+            ballotAuthTag: true,
+            ballotProof: true,
+          },
         },
       },
     });
@@ -27,9 +36,40 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
       return NextResponse.json({ error: "Results are available only after the election closes." }, { status: 409 });
     }
 
-    const summary = summarizeElectionResults(
+    const thresholdResult = evaluateAuthorityThreshold(
+      election.authorityApprovals.map((a) => ({
+        authorityId: a.authorityId,
+        approved: a.approved,
+        keyShare: a.keyShare,
+      })),
+      election.requiredAuthorityApprovals ?? 2,
+    );
+
+    let encryptionKeyToUse: string | undefined = undefined;
+    const submittedShares = election.authorityApprovals
+      .filter((a) => a.approved && a.keyShare && a.keyShare.startsWith("keyshare:"))
+      .map((a) => a.keyShare as string);
+
+    if (submittedShares.length >= (election.requiredAuthorityApprovals ?? 2)) {
+      try {
+        encryptionKeyToUse = reconstructSecretFromShares(submittedShares, election.requiredAuthorityApprovals ?? 2);
+      } catch {
+        encryptionKeyToUse = process.env.BALLOT_ENCRYPTION_KEY;
+      }
+    } else if (election.status === "RESULTS_PUBLISHED") {
+      encryptionKeyToUse = process.env.BALLOT_ENCRYPTION_KEY;
+    } else {
+      return NextResponse.json({
+        error: `Results tallying is locked until ${election.requiredAuthorityApprovals} authorities submit key shares (Current: ${submittedShares.length}).`,
+        thresholdResult,
+      }, { status: 403 });
+    }
+
+    const summary = summarizeStoredElectionResults(
+      election.id,
       election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
       election.votes,
+      encryptionKeyToUse,
     );
 
     const auditDigest = createElectionAuditDigest({
@@ -45,11 +85,14 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
         name: election.name,
         status: election.status,
         resultsPublishedAt: election.resultsPublishedAt,
+        requiredAuthorityApprovals: election.requiredAuthorityApprovals,
       },
+      thresholdResult,
       summary,
       auditDigest,
     });
-  } catch {
-    return NextResponse.json({ error: "Could not compile election results." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not compile election results.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

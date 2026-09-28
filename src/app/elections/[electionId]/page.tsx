@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { createElectionAuditDigest, summarizeElectionResults } from "@/lib/election-results";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
 
 export default async function ElectionDetailPage({
@@ -18,7 +18,16 @@ export default async function ElectionDetailPage({
     where: { id: electionId },
     include: {
       candidates: { orderBy: { sortOrder: "asc" } },
-      votes: { select: { candidateId: true } },
+      votes: {
+        select: {
+          candidateId: true,
+          voterId: true,
+          encryptedBallot: true,
+          ballotNonce: true,
+          ballotAuthTag: true,
+          ballotProof: true,
+        },
+      },
       createdBy: { select: { name: true } },
       blocks: { orderBy: { index: "asc" } },
     },
@@ -26,16 +35,19 @@ export default async function ElectionDetailPage({
 
   if (!election) redirect("/elections");
 
-  const summary = summarizeElectionResults(
-    election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
-    election.votes,
-  );
-  const digest = createElectionAuditDigest({
-    electionId: election.id,
-    totalVotes: summary.totalVotes,
-    candidateResults: summary.candidateResults,
-    publishedAt: election.resultsPublishedAt ?? new Date(),
-  });
+  const isPublished = election.status === "RESULTS_PUBLISHED";
+  const isClosed = election.status === "CLOSED" || isPublished;
+  const summary = isClosed ? summarizeStoredElectionResults(
+      election.id,
+      election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
+      election.votes,
+    ) : null;
+  const digest = summary ? createElectionAuditDigest({
+      electionId: election.id,
+      totalVotes: summary.totalVotes,
+      candidateResults: summary.candidateResults,
+      publishedAt: election.resultsPublishedAt ?? new Date(),
+    }) : null;
   const chain = election.blocks.map((block) => ({
     index: block.index,
     timestamp: block.timestamp.getTime(),
@@ -44,9 +56,6 @@ export default async function ElectionDetailPage({
     hash: block.hash,
   }));
   const blockchainSummary = buildBlockchainSummary(chain);
-
-  const isPublished = election.status === "RESULTS_PUBLISHED";
-  const isClosed = election.status === "CLOSED" || isPublished;
 
   return (
     <main className="portal-shell">
@@ -74,7 +83,7 @@ export default async function ElectionDetailPage({
           <span><strong>Head:</strong> {blockchainSummary.headHash.slice(0, 18) || "N/A"}...</span>
         </div>
 
-        {!isClosed ? (
+        {!summary ? (
           <div className="election-empty">
             <strong>Election is still live.</strong>
             <span>Results remain hidden until the election closes and the admin publishes the outcome.</span>
@@ -86,7 +95,7 @@ export default async function ElectionDetailPage({
               <div>
                 <strong>{isPublished ? "Results published" : "Verification window open"}</strong>
                 <p>
-                  Total votes: {summary.totalVotes}. Winner: {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount})` : "No votes"}. Audit digest: {digest.slice(0, 28)}...
+                  Total votes: {summary.totalVotes}. Winner: {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount})` : "No votes"}. Audit digest: {digest?.slice(0, 28)}...
                 </p>
               </div>
             </div>

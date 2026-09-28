@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import DashboardClient from "@/components/dashboard-client";
+import { prisma } from "@/lib/prisma";
+import DashboardClient, {
+  type DashboardMetrics,
+  type ActivityItem,
+  type UserItem,
+} from "@/components/dashboard-client";
 import { getCurrentUser } from "@/lib/session";
 
 export default async function HomePage() {
@@ -7,5 +12,88 @@ export default async function HomePage() {
   if (!user) redirect("/login");
   if (user.role !== "ADMIN") redirect("/portal");
 
-  return <DashboardClient displayName={user.name} role={user.role} />;
+  const [votersCount, totalVotes, activeElection, rawAuditLogs, rawUsers] = await Promise.all([
+    prisma.user.count({ where: { role: "VOTER" } }),
+    prisma.electionVote.count(),
+    prisma.election.findFirst({
+      where: { status: "ACTIVE" },
+      include: {
+        candidates: { orderBy: { sortOrder: "asc" } },
+        _count: { select: { votes: true } },
+      },
+    }),
+    prisma.auditLog.findMany({
+      take: 6,
+      orderBy: { timestamp: "desc" },
+    }),
+    prisma.user.findMany({
+      select: {
+        id: true,
+        voterId: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: [{ role: "asc" }, { createdAt: "desc" }],
+    }),
+  ]);
+
+  const activeElectionsCount = activeElection ? 1 : 0;
+  const participationRate =
+    votersCount > 0 && activeElection
+      ? Math.round((activeElection._count.votes / votersCount) * 100)
+      : 0;
+
+  const metrics: DashboardMetrics = {
+    votersCount,
+    activeElectionsCount,
+    totalVotes,
+    participationRate,
+    activeElection: activeElection
+      ? {
+          id: activeElection.id,
+          name: activeElection.name,
+          description: activeElection.description,
+          candidatesCount: activeElection.candidates.length,
+          candidates: activeElection.candidates.map((c) => ({
+            id: c.id,
+            name: c.name,
+            description: c.description,
+            sortOrder: c.sortOrder,
+          })),
+          votesCount: activeElection._count.votes,
+          endTime: activeElection.endTime.toISOString(),
+        }
+      : null,
+  };
+
+  const recentActivities: ActivityItem[] = rawAuditLogs.map((log) => ({
+    time: new Date(log.timestamp).toLocaleTimeString(),
+    title: log.eventType.replaceAll("_", " "),
+    detail: log.details || `Action by ${log.actorReference}`,
+    tag: log.eventType.split("_")[0] || "AUDIT",
+    color: log.eventType.includes("FAIL") || log.eventType.includes("FLAG") ? "orange" : "green",
+  }));
+
+  const initialUsers: UserItem[] = rawUsers.map((u) => ({
+    id: u.id,
+    voterId: u.voterId,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    status: u.status,
+    createdAt: u.createdAt.toISOString(),
+  }));
+
+  return (
+    <DashboardClient
+      displayName={user.name}
+      role={user.role}
+      metrics={metrics}
+      recentActivities={recentActivities}
+      initialUsers={initialUsers}
+    />
+  );
 }

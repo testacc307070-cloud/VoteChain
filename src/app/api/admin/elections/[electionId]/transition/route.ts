@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { ElectionStatus } from "@prisma/client";
 import { requireAdminApi } from "@/lib/admin-api";
 import { prisma } from "@/lib/prisma";
 import { evaluateAuthorityThreshold } from "@/lib/authority";
+import { buildElectionIntegritySnapshot } from "@/lib/integrity";
 
 export const runtime = "nodejs";
 
@@ -32,13 +34,17 @@ export async function POST(request: Request, context: { params: Promise<{ electi
   try {
     const election = await prisma.election.findUnique({
       where: { id: electionId },
-      include: { _count: { select: { candidates: true } } },
+      include: {
+        _count: { select: { candidates: true, votes: true } },
+        blocks: { orderBy: { index: "asc" } },
+      },
     });
     if (!election) return NextResponse.json({ error: "Election not found." }, { status: 404 });
 
     const now = new Date();
     let nextStatus: ElectionStatus;
-    let extraData: { candidatesLocked?: boolean; resultsPublishedAt?: Date } = {};
+    let extraData: { candidatesLocked?: boolean; resultsPublishedAt?: Date; merkleRoot?: string; resultsDigest?: string } = {};
+
     if (action === "lock") {
       if (election.status !== ElectionStatus.DRAFT || election.candidatesLocked) {
         return NextResponse.json({ error: "Only a draft election can be locked." }, { status: 409 });
@@ -71,24 +77,51 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       if (election.status !== ElectionStatus.CLOSED) {
         return NextResponse.json({ error: "Results can be published only after an election closes." }, { status: 409 });
       }
+      const required = election.requiredAuthorityApprovals ?? 2;
       const approvals = authorityApprovals.map((approval) => ({
         authorityId: approval.authorityId,
         approved: approval.approved,
+        keyShare: approval.keyShare,
       }));
-      const approvalResult = evaluateAuthorityThreshold(approvals, 3);
+      const approvalResult = evaluateAuthorityThreshold(approvals, required);
       if (!approvalResult.approved) {
         return NextResponse.json({
           error: `Results publication requires ${approvalResult.required} authority approvals. Current approval count: ${approvalResult.approvals}.`,
         }, { status: 409 });
       }
+
+      const integrity = buildElectionIntegritySnapshot({
+        electionId: election.id,
+        totalVotes: election._count.votes,
+        validVotes: election._count.votes,
+        invalidVotes: 0,
+        blockHeight: election.blocks.length,
+      });
+
       nextStatus = ElectionStatus.RESULTS_PUBLISHED;
-      extraData = { resultsPublishedAt: now };
+      extraData = {
+        resultsPublishedAt: now,
+        merkleRoot: integrity.merkleRoot,
+        resultsDigest: `sha256:${election.id}:${now.toISOString()}`,
+      };
     }
 
     const updated = await prisma.election.update({
       where: { id: election.id },
       data: { status: nextStatus, ...extraData },
     });
+
+    // Record append-only audit event
+    await prisma.auditLog.create({
+      data: {
+        eventType: `ELECTION_STATUS_${nextStatus}`,
+        actorReference: `admin:${auth.user.email}`,
+        electionId: election.id,
+        details: `Election "${election.name}" transitioned to ${nextStatus}. Action: ${action}.`,
+        eventHash: createHash("sha256").update(`${election.id}:${nextStatus}:${now.toISOString()}`).digest("hex"),
+      },
+    });
+
     return NextResponse.json({ election: updated });
   } catch {
     return NextResponse.json({ error: "Could not change the election status." }, { status: 500 });

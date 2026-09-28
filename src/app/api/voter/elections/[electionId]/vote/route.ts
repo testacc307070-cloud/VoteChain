@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { appendNextBlockchainBlock, verifyBlockchainChain } from "@/lib/blockchain";
@@ -6,6 +7,7 @@ import { encryptBallot } from "@/lib/encrypted-ballot";
 import { submitVoteOnChain } from "@/lib/ethereum";
 import { checkElectionEligibility } from "@/lib/eligibility";
 import { createVoteReceipt, validateVoteSubmission } from "@/lib/voting";
+import { createZkVoteProof, verifyZkVoteProof } from "@/lib/zk-proof";
 
 export const runtime = "nodejs";
 
@@ -17,6 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
   const { electionId } = await context.params;
 
   let candidateId: string | undefined;
+  let offlineBuffered = false;
   const contentType = request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
@@ -32,6 +35,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     }
 
     candidateId = (body as { candidateId?: unknown }).candidateId as string | undefined;
+    offlineBuffered = Boolean((body as { offlineBuffered?: unknown }).offlineBuffered);
   } else {
     const formData = await request.formData();
     candidateId = typeof formData.get("candidateId") === "string" ? String(formData.get("candidateId")) : undefined;
@@ -45,12 +49,15 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     where: { id: electionId },
     include: {
       candidates: true,
-      votes: { where: { voterId: user.id } },
+      participations: { where: { voterId: user.id }, select: { id: true } },
+      votes: { where: { voterId: user.id }, select: { id: true } },
     },
   });
 
   if (!election) return NextResponse.json({ error: "Election not found." }, { status: 404 });
-  if (election.status !== "ACTIVE") return NextResponse.json({ error: "Voting is only available while an election is active." }, { status: 409 });
+  if (election.status !== "ACTIVE") {
+    return NextResponse.json({ error: "Voting is only available while an election is active." }, { status: 409 });
+  }
 
   const eligibility = checkElectionEligibility({
     userId: user.id,
@@ -66,7 +73,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     electionId: election.id,
     candidateId,
     validCandidateIds: election.candidates.map((candidate) => candidate.id),
-    hasExistingVote: election.votes.length > 0,
+    hasExistingVote: election.participations.length > 0 || election.votes.length > 0,
   });
 
   if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });
@@ -76,25 +83,48 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     const preliminaryReceipt = createVoteReceipt({
       electionId: election.id,
       voteId,
-      candidateId,
       submittedAt: new Date(),
     });
+
+    const validCandidateIds = election.candidates.map((candidate) => candidate.id);
     const encryptedBallot = encryptBallot({
       electionId: election.id,
-      voterId: user.id,
       candidateId,
-      validCandidateIds: election.candidates.map((candidate) => candidate.id),
+      validCandidateIds,
       nonce: voteId,
     });
+
+    // Generate and verify true Zero-Knowledge proof
+    const zkVoteProof = await createZkVoteProof({
+      electionId: election.id,
+      candidateId,
+      validCandidateIds,
+      nonce: voteId,
+    });
+
+    const isZkValid = await verifyZkVoteProof({
+      electionId: election.id,
+      proof: zkVoteProof,
+      validCandidateIds,
+    });
+
+    if (!isZkValid) {
+      return NextResponse.json({ error: "Zero-knowledge proof validation failed for candidate choice." }, { status: 400 });
+    }
+
     const ethereumReceipt = await submitVoteOnChain({
       electionId: election.id,
       ciphertext: encryptedBallot.ciphertext,
       proof: encryptedBallot.proof,
     });
+
     const receipt = {
       ...preliminaryReceipt,
       txHash: ethereumReceipt.transactionHash,
       blockNumber: ethereumReceipt.blockNumber,
+      zkProof: zkVoteProof.proof,
+      zkVerified: true,
+      recoveredFromOfflineBuffer: offlineBuffered,
     };
 
     const existingBlocks: Array<{
@@ -125,44 +155,65 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       payload: JSON.stringify({
         electionId: election.id,
         voteId: receipt.voteId,
-        candidateId,
         receiptId: receipt.receiptId,
         txHash: receipt.txHash,
         encryptedBallot: encryptedBallot.ciphertext,
         ballotNonce: encryptedBallot.nonce,
         ballotAuthTag: encryptedBallot.authTag,
         ballotProof: encryptedBallot.proof,
+        zkProof: zkVoteProof.proof,
         blockNumber: receipt.blockNumber,
         submittedAt: receipt.submittedAt,
+        recoveredFromOfflineBuffer: offlineBuffered,
       }),
     });
 
-    const vote = await prisma.electionVote.create({
-      data: {
-        id: receipt.voteId,
-        electionId: election.id,
-        voterId: user.id,
-        candidateId,
-        receiptId: receipt.receiptId,
-        txHash: receipt.txHash,
-        encryptedBallot: encryptedBallot.ciphertext,
-        ballotNonce: encryptedBallot.nonce,
-        ballotAuthTag: encryptedBallot.authTag,
-        ballotProof: encryptedBallot.proof,
-        blockNumber: receipt.blockNumber,
-        submittedAt: receipt.submittedAt,
-      },
-    });
+    const vote = await prisma.$transaction(async (transaction) => {
+      // Identity / ballot separation:
+      // Record voter participation (1 person 1 vote) separate from anonymous encrypted ballot
+      await transaction.electionVoterParticipation.create({
+        data: { electionId: election.id, voterId: user.id },
+      });
 
-    await prisma.electionBlockchainBlock.create({
-      data: {
-        electionId: election.id,
-        index: nextBlock.index,
-        previousHash: nextBlock.previousHash,
-        payload: nextBlock.payload,
-        hash: nextBlock.hash,
-        timestamp: new Date(nextBlock.timestamp),
-      },
+      const createdVote = await transaction.electionVote.create({
+        data: {
+          id: receipt.voteId,
+          electionId: election.id,
+          receiptId: receipt.receiptId,
+          txHash: receipt.txHash,
+          encryptedBallot: encryptedBallot.ciphertext,
+          ballotNonce: encryptedBallot.nonce,
+          ballotAuthTag: encryptedBallot.authTag,
+          ballotProof: encryptedBallot.proof,
+          zkProof: zkVoteProof.proof,
+          blockNumber: receipt.blockNumber,
+          submittedAt: receipt.submittedAt,
+        },
+      });
+
+      await transaction.electionBlockchainBlock.create({
+        data: {
+          electionId: election.id,
+          index: nextBlock.index,
+          previousHash: nextBlock.previousHash,
+          payload: nextBlock.payload,
+          hash: nextBlock.hash,
+          timestamp: new Date(nextBlock.timestamp),
+        },
+      });
+
+      // Append-oriented audit log
+      await transaction.auditLog.create({
+        data: {
+          eventType: "BALLOT_ACCEPTED",
+          actorReference: `anonymous_credential:${receipt.receiptId.slice(0, 12)}`,
+          electionId: election.id,
+          details: `Encrypted ballot committed to block ${receipt.blockNumber}. Tx: ${receipt.txHash.slice(0, 16)}... ZK Proof verified.`,
+          eventHash: createHash("sha256").update(`${election.id}:${receipt.receiptId}:${receipt.txHash}`).digest("hex"),
+        },
+      });
+
+      return createdVote;
     });
 
     if (contentType.includes("application/json")) {
@@ -177,13 +228,15 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       blockNumber: String(receipt.blockNumber),
       recordHash: receipt.recordHash,
       submittedAt: receipt.submittedAt,
+      zkVerified: "true",
     });
 
     return NextResponse.redirect(new URL(`/portal?${params.toString()}`, request.url));
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "The ballot could not be recorded.";
     if (contentType.includes("application/json")) {
-      return NextResponse.json({ error: "The ballot could not be recorded." }, { status: 500 });
+      return NextResponse.json({ error: message }, { status: 500 });
     }
-    return NextResponse.redirect(new URL("/portal", request.url));
+    return NextResponse.redirect(new URL("/portal?error=" + encodeURIComponent(message), request.url));
   }
 }

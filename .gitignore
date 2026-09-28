@@ -6,6 +6,7 @@ node_modules/
 
 # Next.js and generated build output
 .next/
+.vercel/
 out/
 dist/
 build/
@@ -20,12 +21,17 @@ typechain-types/
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Generated deployment artifacts
 contracts/*.json
 
 # Logs and temporary files
 *.log
+*.tsbuildinfo
 logs/
 tmp/
 temp/

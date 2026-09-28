@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { connection } from "next/server";
 import { DM_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -10,7 +11,9 @@ export const metadata: Metadata = {
   description: "An educational prototype for verifiable election workflows.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  await connection();
+
   return (
     <html lang="en">
       <body className={`${dmSans.variable} ${plexMono.variable}`}>{children}</body>

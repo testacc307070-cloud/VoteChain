@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { decryptStoredBallots, type StoredEncryptedBallot } from "./encrypted-ballot";
 
 export type CandidateSummary = {
   id: string;
@@ -46,6 +47,22 @@ export function summarizeElectionResults(
     candidateResults,
     winner,
   };
+}
+
+export function summarizeStoredElectionResults(
+  electionId: string,
+  candidates: CandidateSummary[],
+  ballots: StoredEncryptedBallot[],
+  encryptionKey?: string,
+) {
+  const votes = decryptStoredBallots({
+    electionId,
+    validCandidateIds: candidates.map((candidate) => candidate.id),
+    ballots,
+    encryptionKey,
+  });
+
+  return summarizeElectionResults(candidates, votes);
 }
 
 export function createElectionAuditDigest({

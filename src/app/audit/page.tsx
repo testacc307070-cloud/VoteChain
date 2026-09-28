@@ -2,39 +2,58 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { buildElectionAuditTrail } from "@/lib/audit";
-import { redirect } from "next/navigation";
+import TamperDemo from "@/components/tamper-demo";
+import { FileText, ShieldCheck } from "lucide-react";
 
 export default async function AuditPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
 
   const elections = await prisma.election.findMany({
-    where: { status: { in: ["CLOSED", "RESULTS_PUBLISHED"] } },
-    include: { candidates: true, votes: { select: { candidateId: true } } },
+    where: { status: { in: ["ACTIVE", "CLOSED", "RESULTS_PUBLISHED"] } },
+    include: {
+      candidates: true,
+      votes: { select: { id: true } },
+      blocks: { orderBy: { index: "asc" } },
+    },
     orderBy: [{ updatedAt: "desc" }],
+  });
+
+  const dbAuditLogs = await prisma.auditLog.findMany({
+    take: 20,
+    orderBy: { timestamp: "desc" },
   });
 
   return (
     <main className="portal-shell">
       <header className="portal-header">
-        <Link className="brand" href={user.role === "ADMIN" ? "/" : "/portal"} aria-label="VoteChain home">
+        <Link className="brand" href={user ? (user.role === "ADMIN" ? "/" : "/portal") : "/login"} aria-label="VoteChain home">
           <span className="brand-mark"><span /><span /><span /></span>
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
-        <form action="/api/auth/logout" method="post">
-          <button className="portal-signout" type="submit">Sign out</button>
-        </form>
+        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          {user ? (
+            <form action="/api/auth/logout" method="post">
+              <button className="portal-signout" type="submit">Sign out</button>
+            </form>
+          ) : (
+            <Link href="/login" className="secondary-button" style={{ fontSize: "0.85rem", padding: "0.4rem 0.8rem" }}>
+              Sign in
+            </Link>
+          )}
+        </div>
       </header>
 
       <section className="portal-content">
-        <p className="eyebrow">AUDIT / INTEGRITY REVIEW</p>
-        <h1>Election audit trail</h1>
-        <p className="page-subtitle">Lifecycle events are recorded as a tamper-evident sequence without revealing voter identities.</p>
+        <p className="eyebrow">AUDIT & INTEGRITY REVIEW</p>
+        <h1>Election audit trail & event log</h1>
+        <p className="page-subtitle">
+          Lifecycle and administrative operations are recorded in an append-oriented, cryptographically hashed event stream without disclosing voter identities.
+        </p>
 
         {elections.length === 0 ? (
           <div className="election-empty">
-            <strong>No closed elections yet.</strong>
-            <span>Once an election closes and is published, the audit trail will appear here.</span>
+            <strong>No active or completed elections yet.</strong>
+            <span>Audit trails appear here as soon as an election begins its lifecycle.</span>
           </div>
         ) : (
           <div className="election-record-list" style={{ marginTop: "2rem" }}>
@@ -56,7 +75,9 @@ export default async function AuditPage() {
                       <span className="record-id">{election.id}</span>
                       <h3>{election.name}</h3>
                     </div>
-                    <span className="election-status status-closed"><i />{election.status}</span>
+                    <span className={`election-status status-${election.status.toLowerCase()}`}>
+                      <i />{election.status}
+                    </span>
                   </div>
 
                   <div className="record-candidates" style={{ marginTop: "1rem" }}>
@@ -67,11 +88,58 @@ export default async function AuditPage() {
                       </div>
                     ))}
                   </div>
+
+                  {election.blocks.length > 0 && (
+                    <TamperDemo
+                      blocks={election.blocks.map((b) => ({
+                        index: b.index,
+                        hash: b.hash,
+                        previousHash: b.previousHash,
+                        payload: b.payload,
+                        timestamp: b.timestamp.toISOString(),
+                      }))}
+                    />
+                  )}
                 </article>
               );
             })}
           </div>
         )}
+
+        {/* Persisted Audit Log Table */}
+        <section style={{ marginTop: "3rem" }}>
+          <div className="section-heading">
+            <div>
+              <h2>Cryptographic System Log</h2>
+              <p>Append-oriented SHA-256 event commitments for administrative actions and ballot ingest.</p>
+            </div>
+          </div>
+
+          <div className="election-record" style={{ marginTop: "1rem" }}>
+            {dbAuditLogs.length === 0 ? (
+              <div style={{ padding: "1rem", color: "var(--muted, #888)" }}>No audit records in database yet.</div>
+            ) : (
+              <div style={{ display: "grid", gap: "0.75rem" }}>
+                {dbAuditLogs.map((log) => (
+                  <div key={log.id} className="candidate-readonly" style={{ justifyContent: "space-between" }}>
+                    <div>
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                        <FileText size={14} color="#38bdf8" />
+                        <strong style={{ fontSize: "0.85rem" }}>{log.eventType}</strong>
+                        <span style={{ fontSize: "0.75rem", color: "var(--muted, #888)" }}>Actor: {log.actorReference}</span>
+                      </div>
+                      <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.8rem" }}>{log.details}</p>
+                    </div>
+                    <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--muted, #888)" }}>
+                      <div>{new Date(log.timestamp).toLocaleTimeString()}</div>
+                      <code>{log.eventHash.slice(0, 16)}...</code>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </section>
     </main>
   );
