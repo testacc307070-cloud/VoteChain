@@ -19,6 +19,8 @@ import {
   getSentEmailHistory,
   clearSentEmailHistory,
   VOTECHAIN_SENDER_EMAIL,
+  getAppBaseUrl,
+  sendVerificationEmail,
 } from "./email";
 
 const TEST_STUDENT_ID_1 = "24TEST01";
@@ -280,3 +282,48 @@ test("Phase 1: Wrong password is blocked", async () => {
   const wrongPasswordMatches = await bcrypt.compare("WrongPassword999!", verifiedUser.passwordHash);
   assert.equal(wrongPasswordMatches, false, "Wrong password must be rejected");
 });
+
+test("Phase 5: Email verification URL uses Vercel production URL rather than localhost", async () => {
+  // Test 1: Explicit baseUrl passed (e.g. from request headers on Vercel)
+  assert.equal(
+    getAppBaseUrl("https://votechain.vercel.app"),
+    "https://votechain.vercel.app"
+  );
+
+  // Test 2: VERCEL_PROJECT_PRODUCTION_URL environment variable
+  const originalVercelProd = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  try {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    process.env.VERCEL_PROJECT_PRODUCTION_URL = "votechain.vercel.app";
+    assert.equal(getAppBaseUrl(), "https://votechain.vercel.app");
+
+    // Test 3: VERCEL_URL fallback
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    process.env.VERCEL_URL = "votechain-git-master.vercel.app";
+    assert.equal(getAppBaseUrl(), "https://votechain-git-master.vercel.app");
+  } finally {
+    if (originalVercelProd !== undefined) {
+      process.env.VERCEL_PROJECT_PRODUCTION_URL = originalVercelProd;
+    } else {
+      delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    }
+    if (originalAppUrl !== undefined) {
+      process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
+    } else {
+      delete process.env.NEXT_PUBLIC_APP_URL;
+    }
+  }
+
+  // Test 4: Verification email generation with production URL
+  const sendResult = await sendVerificationEmail({
+    to: "verify_prod_test@psgtech.ac.in",
+    name: "Production Test Student",
+    studentId: "PROD01",
+    token: "mock-prod-token-12345",
+    baseUrl: "https://votechain.vercel.app",
+  });
+  assert.ok(sendResult.verifyUrl.startsWith("https://votechain.vercel.app/verify-email?token="));
+  assert.ok(!sendResult.verifyUrl.includes("localhost"));
+});
+

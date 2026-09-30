@@ -20,7 +20,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email address is required." }, { status: 400 });
   }
 
-  const result = await resendVerificationEmailByEmail(email.trim());
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+  const host = request.headers.get("host");
+  const reqBaseUrl = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : host
+    ? `${host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https"}://${host}`
+    : undefined;
+
+  const result = await resendVerificationEmailByEmail(email.trim(), reqBaseUrl);
 
   if (!result.success) {
     let statusCode = 400;

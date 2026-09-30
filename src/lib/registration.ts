@@ -20,6 +20,7 @@ export interface RegisterVoterInput {
   studentId: string;
   email: string;
   password: string;
+  baseUrl?: string;
 }
 
 export interface RegisterVoterResult {
@@ -169,6 +170,7 @@ export async function registerStudentVoter(input: RegisterVoterInput): Promise<R
       name: cleanName,
       studentId: cleanStudentId,
       token: rawToken,
+      baseUrl: input.baseUrl,
     });
 
     return {
@@ -257,7 +259,7 @@ export async function verifyEmailToken(rawToken: string): Promise<VerifyTokenRes
   }
 }
 
-export async function resendVerificationEmailByEmail(rawEmail: string): Promise<ResendVerificationResult> {
+export async function resendVerificationEmailByEmail(rawEmail: string, baseUrl?: string): Promise<ResendVerificationResult> {
   if (!isValidPsgEmail(rawEmail)) {
     return {
       success: false,
@@ -322,6 +324,7 @@ export async function resendVerificationEmailByEmail(rawEmail: string): Promise<
       name: user.name,
       studentId: user.voterId || "STUDENT",
       token: rawToken,
+      baseUrl,
     });
 
     return {

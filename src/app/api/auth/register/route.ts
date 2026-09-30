@@ -21,11 +21,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "All fields (name, studentId, email, password) are required." }, { status: 400 });
   }
 
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+  const host = request.headers.get("host");
+  const reqBaseUrl = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : host
+    ? `${host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https"}://${host}`
+    : undefined;
+
   const result = await registerStudentVoter({
     name,
     studentId,
     email,
     password,
+    baseUrl: reqBaseUrl,
   });
 
   if (!result.success) {

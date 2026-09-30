@@ -8,6 +8,7 @@ export interface SendVerificationEmailParams {
   name: string;
   studentId: string;
   token: string;
+  baseUrl?: string;
 }
 
 export interface SentEmailRecord {
@@ -35,8 +36,31 @@ export function setTransportOverride(transporter: Transporter | null): void {
   transportOverride = transporter;
 }
 
-function getAppBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+export function getAppBaseUrl(explicitBaseUrl?: string): string {
+  if (explicitBaseUrl && explicitBaseUrl.trim()) {
+    return explicitBaseUrl.trim().replace(/\/+$/, "");
+  }
+
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    const domain = process.env.VERCEL_PROJECT_PRODUCTION_URL.replace(/\/+$/, "");
+    return domain.startsWith("http") ? domain : `https://${domain}`;
+  }
+
+  if (process.env.VERCEL_URL) {
+    const domain = process.env.VERCEL_URL.replace(/\/+$/, "");
+    return domain.startsWith("http") ? domain : `https://${domain}`;
+  }
+
+  if (envUrl) {
+    return envUrl.replace(/\/+$/, "");
+  }
+
+  return "http://localhost:3000";
 }
 
 function getTransporter(): Transporter | null {
@@ -168,8 +192,8 @@ export async function sendVerificationEmail(params: SendVerificationEmailParams)
   messageId?: string;
   error?: string;
 }> {
-  const { to, name, studentId, token } = params;
-  const baseUrl = getAppBaseUrl();
+  const { to, name, studentId, token, baseUrl: explicitBaseUrl } = params;
+  const baseUrl = getAppBaseUrl(explicitBaseUrl);
   const verifyUrl = `${baseUrl}/verify-email?token=${encodeURIComponent(token)}`;
 
   const subject = "VoteChain — Verify your PSG Tech email address";
