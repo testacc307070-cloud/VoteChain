@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-api";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { evaluateAuthorityThreshold, reconstructSecretFromShares } from "@/lib/authority";
+import { getElectionEncryptionKey } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
 
@@ -54,10 +55,10 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
       try {
         encryptionKeyToUse = reconstructSecretFromShares(submittedShares, election.requiredAuthorityApprovals ?? 2);
       } catch {
-        encryptionKeyToUse = process.env.BALLOT_ENCRYPTION_KEY;
+        encryptionKeyToUse = getElectionEncryptionKey(election);
       }
     } else if (election.status === "RESULTS_PUBLISHED") {
-      encryptionKeyToUse = process.env.BALLOT_ENCRYPTION_KEY;
+      encryptionKeyToUse = getElectionEncryptionKey(election);
     } else {
       return NextResponse.json({
         error: `Results tallying is locked until ${election.requiredAuthorityApprovals} authorities submit key shares (Current: ${submittedShares.length}).`,

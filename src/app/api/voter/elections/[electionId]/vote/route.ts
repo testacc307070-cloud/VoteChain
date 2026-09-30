@@ -8,6 +8,7 @@ import { submitVoteOnChain } from "@/lib/ethereum";
 import { checkVoterElectionEligibility } from "@/lib/eligibility";
 import { createVoteReceipt, validateVoteSubmission } from "@/lib/voting";
 import { createZkVoteProof, verifyZkVoteProof } from "@/lib/zk-proof";
+import { getElectionEncryptionKey } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
 
@@ -90,11 +91,13 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     });
 
     const validCandidateIds = election.candidates.map((candidate) => candidate.id);
+    const electionKey = getElectionEncryptionKey(election);
     const encryptedBallot = encryptBallot({
       electionId: election.id,
       candidateId,
       validCandidateIds,
       nonce: voteId,
+      encryptionKey: electionKey,
     });
 
     // Generate and verify true Zero-Knowledge proof

@@ -4,6 +4,7 @@ import { ElectionStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { splitSecretToShares } from "@/lib/authority";
+import { getElectionEncryptionKey } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
 
@@ -53,7 +54,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
 
   let keyShare = existingApproval?.keyShare ?? null;
   if (approved && !keyShare) {
-    const masterKey = process.env.BALLOT_ENCRYPTION_KEY ?? "votechain-super-secret-ballot-key-32chars";
+    const masterKey = getElectionEncryptionKey(election);
     const authorities = await prisma.user.findMany({
       where: { role: "AUTHORITY" },
       orderBy: { createdAt: "asc" },

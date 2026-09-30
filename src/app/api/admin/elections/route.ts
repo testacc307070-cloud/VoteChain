@@ -3,6 +3,7 @@ import { ElectionStatus } from "@prisma/client";
 import { requireAdminApi } from "@/lib/admin-api";
 import { parseElectionInput } from "@/lib/election-validation";
 import { prisma } from "@/lib/prisma";
+import { generateElectionKey } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,7 @@ export async function POST(request: Request) {
     : [];
 
   try {
+    const { encryptedMasterKey, keyCommitment } = generateElectionKey();
     const election = await prisma.election.create({
       data: {
         name: parsed.data.name,
@@ -50,6 +52,8 @@ export async function POST(request: Request) {
         status: ElectionStatus.DRAFT,
         eligibleVoterIds,
         createdById: auth.user.id,
+        encryptedMasterKey,
+        keyCommitment,
         candidates: { create: parsed.data.candidates.map((candidate, sortOrder) => ({ ...candidate, sortOrder })) },
       },
       include: { candidates: { orderBy: { sortOrder: "asc" } } },

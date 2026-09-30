@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { evaluateAuthorityThreshold, stringifyAuthorityStatus } from "@/lib/authority";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
+import { getElectionEncryptionKey } from "@/lib/election-keys";
 import { KeyRound, ShieldCheck, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 
 export default async function AuthorityPage() {
@@ -84,10 +85,12 @@ export default async function AuthorityPage() {
               let summary = null;
               if (authorityStatus.canReconstructKey || election.status === "RESULTS_PUBLISHED") {
                 try {
+                  const keyToUse = getElectionEncryptionKey(election);
                   summary = summarizeStoredElectionResults(
                     election.id,
                     election.candidates.map((c) => ({ id: c.id, name: c.name })),
                     election.votes,
+                    keyToUse,
                   );
                 } catch {
                   // key reconstruction in progress
