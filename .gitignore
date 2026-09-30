@@ -26,6 +26,10 @@ typechain-types/
 *.p12
 *.pfx
 
+# Class lists and voter eligibility CSVs (must never be committed)
+*.csv
+/class-lists/
+/eligibility/
 # Generated deployment artifacts
 contracts/*.json
 

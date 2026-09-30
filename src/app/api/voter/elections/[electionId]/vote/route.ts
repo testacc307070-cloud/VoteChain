@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/session";
 import { appendNextBlockchainBlock, verifyBlockchainChain } from "@/lib/blockchain";
 import { encryptBallot } from "@/lib/encrypted-ballot";
 import { submitVoteOnChain } from "@/lib/ethereum";
-import { checkElectionEligibility } from "@/lib/eligibility";
+import { checkVoterElectionEligibility } from "@/lib/eligibility";
 import { createVoteReceipt, validateVoteSubmission } from "@/lib/voting";
 import { createZkVoteProof, verifyZkVoteProof } from "@/lib/zk-proof";
 
@@ -59,10 +59,13 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     return NextResponse.json({ error: "Voting is only available while an election is active." }, { status: 409 });
   }
 
-  const eligibility = checkElectionEligibility({
+  const eligibility = await checkVoterElectionEligibility({
     userId: user.id,
-    eligibleVoterIds: election.eligibleVoterIds.length > 0 ? election.eligibleVoterIds : [user.id],
-    isEligible: user.role === "VOTER",
+    email: user.email,
+    voterId: user.voterId,
+    role: user.role,
+    emailVerified: Boolean(user.emailVerified),
+    electionId: election.id,
   });
 
   if (!eligibility.ok) {
@@ -172,7 +175,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       // Identity / ballot separation:
       // Record voter participation (1 person 1 vote) separate from anonymous encrypted ballot
       await transaction.electionVoterParticipation.create({
-        data: { electionId: election.id, voterId: user.id },
+        data: { electionId: election.id, voterId: user.id, votedAt: new Date() },
       });
 
       const createdVote = await transaction.electionVote.create({

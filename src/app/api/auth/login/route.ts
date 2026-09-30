@@ -27,6 +27,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
   }
 
+  // Phase 1 requirement: Block unverified voters from signing in
+  if (user.role === "VOTER" && !user.emailVerified) {
+    return NextResponse.json(
+      {
+        error: "Your email address has not been verified yet. Please check your PSG Tech inbox for the verification link.",
+        emailUnverified: true,
+        email: user.email,
+      },
+      { status: 403 }
+    );
+  }
+
   await setSessionCookie(user.id);
   return NextResponse.json({ role: user.role, redirectTo: getRoleLandingRoute(user.role) });
 }

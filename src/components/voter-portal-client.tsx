@@ -29,6 +29,8 @@ type Election = {
   endTime: string;
   candidates: Candidate[];
   hasVoted: boolean;
+  isEligible?: boolean;
+  eligibilityReason?: string;
 };
 
 type VoterPortalProps = {
@@ -356,7 +358,15 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                   <span><strong>End:</strong> {new Date(election.endTime).toUTCString().slice(0, 22)}</span>
                 </div>
 
-                {election.hasVoted ? (
+                {election.isEligible === false ? (
+                  <div className="portal-status" style={{ marginTop: "1rem", borderLeft: "4px solid #ef4444" }}>
+                    <span className="portal-status-mark" style={{ color: "#ef4444" }}>✕</span>
+                    <div>
+                      <strong style={{ color: "#ef4444" }}>Not Registered for this Election</strong>
+                      <p>{election.eligibilityReason || "You are not included in the official class register uploaded by the election administrator."}</p>
+                    </div>
+                  </div>
+                ) : election.hasVoted ? (
                   <div className="portal-status" style={{ marginTop: "1rem" }}>
                     <span className="portal-status-mark">✓</span>
                     <div>

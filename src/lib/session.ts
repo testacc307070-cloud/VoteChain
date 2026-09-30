@@ -63,7 +63,7 @@ export async function getCurrentUser() {
   if (!session) return null;
   return prisma.user.findFirst({
     where: { id: session.userId, status: "ACTIVE" },
-    select: { id: true, name: true, email: true, role: true, voterId: true },
+    select: { id: true, name: true, email: true, role: true, voterId: true, emailVerified: true },
   });
 }
 

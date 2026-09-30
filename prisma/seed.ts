@@ -13,8 +13,8 @@ async function main() {
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.upsert({
     where: { email },
-    update: { passwordHash, name: "VoteChain Administrator", role: UserRole.ADMIN, status: "ACTIVE" },
-    create: { email, passwordHash, name: "VoteChain Administrator", role: UserRole.ADMIN },
+    update: { passwordHash, name: "VoteChain Administrator", role: UserRole.ADMIN, status: "ACTIVE", emailVerified: true },
+    create: { email, passwordHash, name: "VoteChain Administrator", role: UserRole.ADMIN, emailVerified: true },
   });
   console.info(`Seeded administrator account: ${email}`);
 
@@ -34,8 +34,8 @@ async function main() {
     const hash = account.password === defaultPassword ? defaultPasswordHash : await bcrypt.hash(account.password, 12);
     const user = await prisma.user.upsert({
       where: { email: account.email.trim().toLowerCase() },
-      update: { name: account.name, role: account.role, voterId: account.voterId, passwordHash: hash, status: "ACTIVE" },
-      create: { email: account.email.trim().toLowerCase(), name: account.name, role: account.role, voterId: account.voterId, passwordHash: hash },
+      update: { name: account.name, role: account.role, voterId: account.voterId, passwordHash: hash, status: "ACTIVE", emailVerified: true },
+      create: { email: account.email.trim().toLowerCase(), name: account.name, role: account.role, voterId: account.voterId, passwordHash: hash, emailVerified: true },
     });
     console.info(`Seeded ${account.role.toLowerCase()}: ${user.email} (${account.name})`);
   }

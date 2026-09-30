@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { checkVoterElectionEligibility } from "@/lib/eligibility";
 import VoterPortalClient from "@/components/voter-portal-client";
 
 export default async function PortalPage({
@@ -45,20 +46,35 @@ export default async function PortalPage({
     orderBy: [{ startTime: "asc" }],
   });
 
-  const formattedElections = activeElections.map((election) => ({
-    id: election.id,
-    name: election.name,
-    description: election.description,
-    startTime: election.startTime.toISOString(),
-    endTime: election.endTime.toISOString(),
-    hasVoted: election.participations.length > 0 || election.votes.length > 0,
-    candidates: election.candidates.map((c) => ({
-      id: c.id,
-      name: c.name,
-      description: c.description,
-      sortOrder: c.sortOrder,
-    })),
-  }));
+  const formattedElections = await Promise.all(
+    activeElections.map(async (election) => {
+      const eligibility = await checkVoterElectionEligibility({
+        userId: user.id,
+        email: user.email,
+        voterId: user.voterId,
+        role: user.role,
+        emailVerified: Boolean(user.emailVerified),
+        electionId: election.id,
+      });
+
+      return {
+        id: election.id,
+        name: election.name,
+        description: election.description,
+        startTime: election.startTime.toISOString(),
+        endTime: election.endTime.toISOString(),
+        hasVoted: election.participations.length > 0 || election.votes.length > 0,
+        isEligible: eligibility.ok,
+        eligibilityReason: eligibility.reason,
+        candidates: election.candidates.map((c) => ({
+          id: c.id,
+          name: c.name,
+          description: c.description,
+          sortOrder: c.sortOrder,
+        })),
+      };
+    })
+  );
 
   return (
     <VoterPortalClient

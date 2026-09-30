@@ -16,6 +16,7 @@ import {
   LogOut,
   Save,
   Trash2,
+  Upload,
   UsersRound,
   X,
 } from "lucide-react";
@@ -64,12 +65,39 @@ export default function ElectionManager({ displayName, initialElections }: Elect
   const [message, setMessage] = useState("");
   const initials = displayName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
 
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+
   async function loadElections() {
     try {
       const result = await requestJson<{ elections: Election[] }>("/api/admin/elections");
       setElections(result.elections);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Could not load elections.");
+    }
+  }
+
+  async function handleCsvUpload(electionId: string, file?: File) {
+    if (!file) return;
+    setUploadingId(electionId);
+    setError("");
+    setMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(`/api/admin/elections/${electionId}/eligibility`, {
+        method: "POST",
+        body: formData,
+      });
+      const result = (await response.json()) as { error?: string; message?: string; count?: number; duplicatesIgnored?: number };
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to upload class eligibility CSV.");
+      }
+      setMessage(result.message || `Uploaded ${result.count} eligible voters.`);
+      await loadElections();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
+    } finally {
+      setUploadingId(null);
     }
   }
 
@@ -253,6 +281,28 @@ export default function ElectionManager({ displayName, initialElections }: Elect
                 <input aria-label="New candidate description" name="description" maxLength={1000} placeholder="Short description" />
                 <button className="secondary-button" type="submit" disabled={pendingId === election.id || election.candidates.length >= 20}><CirclePlus size={14} />Add candidate</button>
               </form>}
+              <div style={{ marginTop: "1rem", padding: "0.85rem", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <UsersRound size={15} style={{ color: "#10b981" }} />
+                    <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>Official Class Voter List (CSV)</span>
+                  </div>
+                  <label className="secondary-button" style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                    <Upload size={13} />
+                    <span>{uploadingId === election.id ? "Uploading..." : "Upload Class CSV"}</span>
+                    <input
+                      type="file"
+                      accept=".csv,text/csv"
+                      style={{ display: "none" }}
+                      disabled={uploadingId === election.id}
+                      onChange={(e) => void handleCsvUpload(election.id, e.target.files?.[0])}
+                    />
+                  </label>
+                </div>
+                <p style={{ fontSize: "0.75rem", color: "var(--muted, #888)", margin: "0.4rem 0 0" }}>
+                  CSV format: <code>student_id,email</code>. Only officially enrolled <code>@psgtech.ac.in</code> students are eligible.
+                </p>
+              </div>
               <div className="record-footer">
                 <span>{statusCopy[election.status] ?? "Lifecycle status is being managed."}</span>
                 {transition && (
