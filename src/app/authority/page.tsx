@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
-import { evaluateAuthorityThreshold, stringifyAuthorityStatus } from "@/lib/authority";
+import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/lib/authority";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { getElectionEncryptionKey } from "@/lib/election-keys";
 import { KeyRound, ShieldCheck, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
@@ -85,7 +85,20 @@ export default async function AuthorityPage() {
               let summary = null;
               if (authorityStatus.canReconstructKey || election.status === "RESULTS_PUBLISHED") {
                 try {
-                  const keyToUse = getElectionEncryptionKey(election);
+                  const submittedShares = election.authorityApprovals
+                    .filter((a) => a.approved && a.keyShare && a.keyShare.startsWith("keyshare:"))
+                    .map((a) => a.keyShare as string);
+
+                  const keyToUse =
+                    submittedShares.length >= threshold
+                      ? reconstructAndValidateElectionKey({
+                          electionId: election.id,
+                          keyCommitment: election.keyCommitment,
+                          shares: submittedShares,
+                          threshold,
+                        })
+                      : getElectionEncryptionKey(election);
+
                   summary = summarizeStoredElectionResults(
                     election.id,
                     election.candidates.map((c) => ({ id: c.id, name: c.name })),
@@ -93,7 +106,7 @@ export default async function AuthorityPage() {
                     keyToUse,
                   );
                 } catch {
-                  // key reconstruction in progress
+                  // key reconstruction in progress or tampered
                 }
               }
 

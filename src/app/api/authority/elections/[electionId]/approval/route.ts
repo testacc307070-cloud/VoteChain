@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { ElectionStatus } from "@prisma/client";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { splitSecretToShares } from "@/lib/authority";
+import { splitElectionSecret } from "@/lib/authority";
 import { getElectionEncryptionKey } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
@@ -60,10 +60,13 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       orderBy: { createdAt: "asc" },
     });
     const authIndex = authorities.findIndex((a) => a.id === user.id);
+    if (authIndex < 0) {
+      return NextResponse.json({ error: "You are not a designated authority for this election." }, { status: 403 });
+    }
     const total = Math.max(authorities.length, 3);
     const threshold = election.requiredAuthorityApprovals || 2;
-    const shares = splitSecretToShares(masterKey, total, threshold);
-    keyShare = shares[authIndex >= 0 ? authIndex : 0];
+    const shares = splitElectionSecret(election.id, masterKey, total, threshold);
+    keyShare = shares[authIndex % total];
   }
 
   const updatedApproval = await prisma.electionAuthorityApproval.upsert({
@@ -85,14 +88,14 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     },
   });
 
-  // Record append-only audit event
+  // Record append-only audit event (without exposing secret share)
   await prisma.auditLog.create({
     data: {
       eventType: approved ? "AUTHORITY_APPROVAL_GRANTED" : "AUTHORITY_REVIEW_FLAGGED",
       actorReference: `authority:${user.email}`,
       electionId,
       details: approved
-        ? `Authority ${user.name} approved results and submitted key share (${keyShare ? "share attached" : "no share"}).`
+        ? `Authority ${user.name} approved results and submitted key share.`
         : `Authority ${user.name} flagged election for review.`,
       eventHash: createHash("sha256").update(`${electionId}:${user.id}:${approved}:${Date.now()}`).digest("hex"),
     },
@@ -100,7 +103,17 @@ export async function POST(request: Request, context: { params: Promise<{ electi
 
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
-    return NextResponse.json({ ok: true, approval: updatedApproval });
+    return NextResponse.json({
+      ok: true,
+      approval: {
+        id: updatedApproval.id,
+        electionId: updatedApproval.electionId,
+        authorityId: updatedApproval.authorityId,
+        approved: updatedApproval.approved,
+        hasKeyShare: Boolean(updatedApproval.keyShare),
+        updatedAt: updatedApproval.updatedAt,
+      },
+    });
   }
 
   return NextResponse.redirect(new URL("/authority", request.url));
