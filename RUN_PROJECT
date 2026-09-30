@@ -1,0 +1,104 @@
+VOTECHAIN LOCAL DEMO - WINDOWS POWERSHELL
+==========================================
+
+Requirements
+------------
+- Windows 10/11
+- Node.js 20.9+ and npm
+- Git (only needed to clone)
+- Docker Desktop with Docker Compose, OR a local PostgreSQL server and database
+- Ports 3000, 5433, and 8545 available
+
+FIRST-TIME SETUP FROM GITHUB
+----------------------------
+Run these commands in PowerShell:
+
+  git clone https://github.com/testacc307070-cloud/VoteChain.git
+  cd VoteChain
+  npm ci
+  Copy-Item .env.example .env
+
+npm ci installs packages and generates the Prisma Client.
+
+START THE DATABASE
+------------------
+Recommended: install and start Docker Desktop, then run from the project folder:
+
+  docker compose up -d --wait postgres
+
+This starts PostgreSQL on 127.0.0.1:5433. The local demo database is named
+votechain; its Compose-only development user/password are configured in
+.env.example. Do not use these development credentials outside a local demo.
+
+If using a local PostgreSQL installation instead, create a database and user,
+then change DATABASE_URL in your ignored .env file to match that local server.
+Keep the database running while VoteChain is open.
+
+START GANACHE (SECOND POWERSHELL WINDOW)
+----------------------------------------
+Open another PowerShell window, change to the VoteChain project folder, and run:
+
+  npm run blockchain:node
+
+Leave this window open. Ganache is the local test blockchain; it does not connect
+to or deploy anything online.
+
+DEPLOY THE CONTRACT AND PREPARE THE DATABASE
+--------------------------------------------
+In the first PowerShell window, from the VoteChain project folder, run:
+
+  npm run blockchain:deploy
+
+Copy the printed contract address. Open .env and replace the value of
+VOTECHAIN_CONTRACT_ADDRESS with that address. This deployment address belongs
+to the current Ganache session; deploy again if you restart Ganache with a fresh
+chain.
+
+Then run:
+
+  npx prisma migrate deploy
+  npm run db:seed
+
+START THE WEB APP
+-----------------
+In the first PowerShell window, run:
+
+  npm run dev
+
+Wait for Next.js to report it is ready, then open:
+
+  http://localhost:3000
+
+Keep the database, Ganache, and web app running in their respective windows.
+To stop the web app or Ganache, press Ctrl+C in that service's window. Stop the
+Compose database with this command (its data volume is preserved):
+
+  docker compose down
+
+DEMO LOGINS
+-----------
+Administrator: admin@votechain.local / adminPassword123!
+Voter Alice:   voter@votechain.local / voterPassword123!
+Voter Bob:     voter2@votechain.local / demoPassword123!
+Observer:      observer@votechain.local / observerPassword123!
+Authority 1:   authority@votechain.local / authorityPassword123!
+Authority 2:   authority2@votechain.local / demoPassword123!
+Authority 3:   authority3@votechain.local / demoPassword123!
+
+These are public demo credentials. Use only on the local prototype, never on a
+public or production deployment.
+
+DEMO WORKFLOW
+-------------
+1. Sign in as Administrator. Create an election, add candidates, set voter
+   eligibility, lock candidates, and activate the election.
+2. Sign in as Alice or Bob and open the voter portal. Cast a ballot and keep the
+   receipt for verification.
+3. Sign in as Administrator and close the election.
+4. Sign in as Authority 1 and Authority 2 and submit approvals for the tally.
+5. Check published results at /results and verify the ballot receipt at /verify.
+   Use Observer at /observer to inspect audit and chain integrity.
+
+Each friend running the project uses their own local database and their own
+local Ganache chain. They cannot access your computer's localhost unless you set
+up separate LAN networking; no internet-hosted demo is started by these steps.
