@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { buildElectionIntegritySnapshot } from "@/lib/integrity";
-import { evaluateAuthorityThreshold, stringifyAuthorityStatus } from "@/lib/authority";
+import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/lib/authority";
+import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
 import { buildElectionQrReference } from "@/lib/qr";
 import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
 import QrCode from "@/components/qr-code";
@@ -67,11 +68,63 @@ export default async function ResultsPage() {
         ) : (
           <div className="election-record-list" style={{ marginTop: "2rem" }}>
             {elections.map((election) => {
-              const summary = summarizeStoredElectionResults(
+              const threshold = election.requiredAuthorityApprovals ?? 2;
+              const authorityStatus = evaluateAuthorityThreshold(
+                election.authorityApprovals.map((a) => ({
+                  authorityId: a.authorityId,
+                  approved: a.approved,
+                  keyShare: a.keyShare,
+                })),
+                threshold,
                 election.id,
-                election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
-                election.votes,
               );
+
+              let encryptionKeyToUse: string | undefined = undefined;
+              if (authorityStatus.canReconstructKey) {
+                const submittedShares = election.authorityApprovals
+                  .filter((a) => a.approved && a.keyShare && a.keyShare.startsWith("keyshare:"))
+                  .map((a) => a.keyShare as string);
+                try {
+                  encryptionKeyToUse = reconstructAndValidateElectionKey({
+                    electionId: election.id,
+                    keyCommitment: election.keyCommitment,
+                    shares: submittedShares,
+                    threshold,
+                  });
+                } catch {
+                  // Key reconstruction failed or tampered
+                }
+              } else if (isLegacyElection(election)) {
+                try {
+                  encryptionKeyToUse = getElectionEncryptionKey(election, { purpose: "results_tally" });
+                } catch {
+                  // Legacy key missing or corrupted
+                }
+              }
+
+              let summary;
+              if (encryptionKeyToUse) {
+                try {
+                  summary = summarizeStoredElectionResults(
+                    election.id,
+                    election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
+                    election.votes,
+                    encryptionKeyToUse,
+                  );
+                } catch {
+                  summary = {
+                    totalVotes: election.votes.length,
+                    candidateResults: election.candidates.map((candidate) => ({ candidateId: candidate.id, name: candidate.name, voteCount: 0 })),
+                    winner: null,
+                  };
+                }
+              } else {
+                summary = {
+                  totalVotes: election.votes.length,
+                  candidateResults: election.candidates.map((candidate) => ({ candidateId: candidate.id, name: candidate.name, voteCount: 0 })),
+                  winner: null,
+                };
+              }
 
               const digest = createElectionAuditDigest({
                 electionId: election.id,
@@ -96,16 +149,6 @@ export default async function ResultsPage() {
                 invalidVotes: 0,
                 blockHeight: blockchainSummary.blockCount,
               });
-
-              // Real authority approvals evaluated from database
-              const authorityStatus = evaluateAuthorityThreshold(
-                election.authorityApprovals.map((a) => ({
-                  authorityId: a.authorityId,
-                  approved: a.approved,
-                  keyShare: a.keyShare,
-                })),
-                election.requiredAuthorityApprovals ?? 2,
-              );
 
               const qrReference = buildElectionQrReference({
                 electionId: election.id,

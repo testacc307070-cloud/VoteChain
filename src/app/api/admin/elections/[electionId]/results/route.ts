@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-api";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
 import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey } from "@/lib/authority";
-import { getElectionEncryptionKey } from "@/lib/election-keys";
+import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
 
 export const runtime = "nodejs";
 
@@ -52,7 +52,7 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
       .filter((a) => a.approved && a.keyShare && a.keyShare.startsWith("keyshare:"))
       .map((a) => a.keyShare as string);
 
-    if (submittedShares.length >= (election.requiredAuthorityApprovals ?? 2)) {
+    if (thresholdResult.canReconstructKey && submittedShares.length >= (election.requiredAuthorityApprovals ?? 2)) {
       try {
         encryptionKeyToUse = reconstructAndValidateElectionKey({
           electionId: election.id,
@@ -67,11 +67,13 @@ export async function GET(_request: Request, context: { params: Promise<{ electi
           thresholdResult,
         }, { status: 400 });
       }
-    } else if (election.status === "RESULTS_PUBLISHED") {
-      encryptionKeyToUse = getElectionEncryptionKey(election);
+    } else if (isLegacyElection(election)) {
+      // Historical/test elections created before Phase 9.1 don't have an encryptedMasterKey envelope.
+      // Allow legacy decryption fallback for backward compatibility.
+      encryptionKeyToUse = getElectionEncryptionKey(election, { purpose: "results_tally" });
     } else {
       return NextResponse.json({
-        error: `Results tallying is locked until ${election.requiredAuthorityApprovals} authorities submit key shares (Current: ${submittedShares.length}).`,
+        error: `Results tallying is locked until ${election.requiredAuthorityApprovals ?? 2} authorities submit valid key shares (Current valid shares: ${thresholdResult.sharesSubmitted}).`,
         thresholdResult,
       }, { status: 403 });
     }

@@ -51,16 +51,45 @@ export function generateElectionKey(): ElectionKeyEnvelope {
   };
 }
 
+export type ElectionKeyResolutionOptions = {
+  purpose?: "vote_encryption" | "authority_share_generation" | "results_tally";
+};
+
+/**
+ * Identifies whether an election is a legacy/historical prototype election (e.g. Phase 8)
+ * that does not possess a per-election envelope.
+ */
+export function isLegacyElection(
+  election?: {
+    encryptedMasterKey?: string | null;
+  } | null,
+): boolean {
+  return !election || !election.encryptedMasterKey;
+}
+
 /**
  * Resolves the 256-bit encryption key for an election.
- * - If the election has an encryptedMasterKey envelope, decrypts and validates it against keyCommitment.
- * - If not present (e.g. legacy/test elections), falls back to the server BALLOT_ENCRYPTION_KEY.
+ * - For active voting: decrypts the per-election DEK envelope via server KEK.
+ * - For results tallying on Phase 9+ elections: FORBIDDEN! Results must be decrypted
+ *   exclusively via reconstructed 2-of-3 authority shares.
+ * - For legacy elections: allows backwards-compatible resolution.
  */
-export function getElectionEncryptionKey(election?: {
-  encryptedMasterKey?: string | null;
-  keyCommitment?: string | null;
-} | null): string {
+export function getElectionEncryptionKey(
+  election?: {
+    encryptedMasterKey?: string | null;
+    keyCommitment?: string | null;
+  } | null,
+  options?: ElectionKeyResolutionOptions,
+): string {
+  // If an election is modern (has per-election DEK envelope)
   if (election?.encryptedMasterKey && election.encryptedMasterKey.startsWith("kek:aes-256-gcm:")) {
+    // Phase 9.3 Hard Rule: Direct master key bypass is strictly forbidden for results tallying
+    if (options?.purpose === "results_tally") {
+      throw new Error(
+        "Direct master key resolution is forbidden for results tallying in Phase 9+. Results must be decrypted exclusively using 2-of-3 reconstructed authority shares.",
+      );
+    }
+
     const kek = getServerKek();
     const parts = election.encryptedMasterKey.split(":");
     if (parts.length === 5) {
@@ -72,7 +101,7 @@ export function getElectionEncryptionKey(election?: {
       decipher.setAuthTag(authTag);
       const rawKey = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
 
-      // Verify commitment integrity if present
+      // Verify commitment integrity
       if (election.keyCommitment) {
         const expectedCommitment = `sha256:${createHash("sha256").update(rawKey).digest("hex")}`;
         if (election.keyCommitment !== expectedCommitment) {
@@ -84,7 +113,12 @@ export function getElectionEncryptionKey(election?: {
     }
   }
 
-  // Graceful fallback to BALLOT_ENCRYPTION_KEY for legacy/test elections without per-election envelope
+  // Modern election record corrupted (keyCommitment present but envelope missing)
+  if (election && election.keyCommitment && !election.encryptedMasterKey) {
+    throw new Error("Corrupted election: keyCommitment exists but encryptedMasterKey envelope is missing.");
+  }
+
+  // Graceful fallback to BALLOT_ENCRYPTION_KEY ONLY for legacy/test elections without per-election envelope
   const fallback = process.env.BALLOT_ENCRYPTION_KEY;
   if (!fallback || fallback.length < 32) {
     throw new Error("BALLOT_ENCRYPTION_KEY must contain at least 32 characters.");

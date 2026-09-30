@@ -54,7 +54,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
 
   let keyShare = existingApproval?.keyShare ?? null;
   if (approved && !keyShare) {
-    const masterKey = getElectionEncryptionKey(election);
+    const masterKey = getElectionEncryptionKey(election, { purpose: "authority_share_generation" });
     const authorities = await prisma.user.findMany({
       where: { role: "AUTHORITY" },
       orderBy: { createdAt: "asc" },

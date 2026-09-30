@@ -91,7 +91,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     });
 
     const validCandidateIds = election.candidates.map((candidate) => candidate.id);
-    const electionKey = getElectionEncryptionKey(election);
+    const electionKey = getElectionEncryptionKey(election, { purpose: "vote_encryption" });
     const encryptedBallot = encryptBallot({
       electionId: election.id,
       candidateId,

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
 import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/lib/authority";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { getElectionEncryptionKey } from "@/lib/election-keys";
+import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
 import { KeyRound, ShieldCheck, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 
 export default async function AuthorityPage() {
@@ -83,28 +83,32 @@ export default async function AuthorityPage() {
               const hasCurrentApproved = currentApproval?.approved === true;
 
               let summary = null;
-              if (authorityStatus.canReconstructKey || election.status === "RESULTS_PUBLISHED") {
+              if (authorityStatus.canReconstructKey || (election.status === "RESULTS_PUBLISHED" && isLegacyElection(election))) {
                 try {
                   const submittedShares = election.authorityApprovals
                     .filter((a) => a.approved && a.keyShare && a.keyShare.startsWith("keyshare:"))
                     .map((a) => a.keyShare as string);
 
                   const keyToUse =
-                    submittedShares.length >= threshold
+                    authorityStatus.canReconstructKey && submittedShares.length >= threshold
                       ? reconstructAndValidateElectionKey({
                           electionId: election.id,
                           keyCommitment: election.keyCommitment,
                           shares: submittedShares,
                           threshold,
                         })
-                      : getElectionEncryptionKey(election);
+                      : isLegacyElection(election)
+                        ? getElectionEncryptionKey(election, { purpose: "results_tally" })
+                        : undefined;
 
-                  summary = summarizeStoredElectionResults(
-                    election.id,
-                    election.candidates.map((c) => ({ id: c.id, name: c.name })),
-                    election.votes,
-                    keyToUse,
-                  );
+                  if (keyToUse) {
+                    summary = summarizeStoredElectionResults(
+                      election.id,
+                      election.candidates.map((c) => ({ id: c.id, name: c.name })),
+                      election.votes,
+                      keyToUse,
+                    );
+                  }
                 } catch {
                   // key reconstruction in progress or tampered
                 }
