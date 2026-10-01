@@ -144,97 +144,122 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       recoveredFromOfflineBuffer: offlineBuffered,
     };
 
-    const existingBlocks: Array<{
-      index: number;
-      timestamp: Date;
-      previousHash: string;
-      payload: string;
-      hash: string;
-    }> = await prisma.electionBlockchainBlock.findMany({
-      where: { electionId: election.id },
-      orderBy: { index: "asc" },
-    });
+    let nextBlock: ReturnType<typeof appendNextBlockchainBlock> | null = null;
+    let voteRecord = null;
+    let attempts = 0;
+    while (attempts < 3) {
+      attempts++;
+      try {
+        const existingBlocks: Array<{
+          index: number;
+          timestamp: Date;
+          previousHash: string;
+          payload: string;
+          hash: string;
+        }> = await prisma.electionBlockchainBlock.findMany({
+          where: { electionId: election.id },
+          orderBy: { index: "asc" },
+        });
 
-    const chain = existingBlocks.map((block) => ({
-      index: block.index,
-      timestamp: block.timestamp.getTime(),
-      previousHash: block.previousHash,
-      payload: block.payload,
-      hash: block.hash,
-    }));
+        const chain = existingBlocks.map((block) => ({
+          index: block.index,
+          timestamp: block.timestamp.getTime(),
+          previousHash: block.previousHash,
+          payload: block.payload,
+          hash: block.hash,
+        }));
 
-    if (existingBlocks.length > 0 && !verifyBlockchainChain(chain)) {
-      throw new Error("Election blockchain integrity check failed.");
+        if (existingBlocks.length > 0 && !verifyBlockchainChain(chain)) {
+          throw new Error("Election blockchain integrity check failed.");
+        }
+
+        nextBlock = appendNextBlockchainBlock({
+          chain,
+          payload: JSON.stringify({
+            electionId: election.id,
+            voteId: receipt.voteId,
+            receiptId: receipt.receiptId,
+            txHash: receipt.txHash,
+            encryptedBallot: encryptedBallot.ciphertext,
+            ballotNonce: encryptedBallot.nonce,
+            ballotAuthTag: encryptedBallot.authTag,
+            ballotProof: encryptedBallot.proof,
+            zkProof: zkVoteProof.proof,
+            blockNumber: receipt.blockNumber,
+            submittedAt: receipt.submittedAt,
+            recoveredFromOfflineBuffer: offlineBuffered,
+          }),
+        });
+
+        voteRecord = await prisma.$transaction(
+          async (transaction) => {
+            // Identity / ballot separation:
+            // Record voter participation (1 person 1 vote) separate from anonymous encrypted ballot
+            await transaction.electionVoterParticipation.create({
+              data: { electionId: election.id, voterId: user.id, votedAt: new Date() },
+            });
+
+            const createdVote = await transaction.electionVote.create({
+              data: {
+                id: receipt.voteId,
+                electionId: election.id,
+                receiptId: receipt.receiptId,
+                txHash: receipt.txHash,
+                encryptedBallot: encryptedBallot.ciphertext,
+                ballotNonce: encryptedBallot.nonce,
+                ballotAuthTag: encryptedBallot.authTag,
+                ballotProof: encryptedBallot.proof,
+                zkProof: zkVoteProof.proof,
+                blockNumber: receipt.blockNumber,
+                submittedAt: receipt.submittedAt,
+              },
+            });
+
+            await transaction.electionBlockchainBlock.create({
+              data: {
+                electionId: election.id,
+                index: nextBlock!.index,
+                previousHash: nextBlock!.previousHash,
+                payload: nextBlock!.payload,
+                hash: nextBlock!.hash,
+                timestamp: new Date(nextBlock!.timestamp),
+              },
+            });
+
+            // Append-oriented audit log
+            await transaction.auditLog.create({
+              data: {
+                eventType: "BALLOT_ACCEPTED",
+                actorReference: `anonymous_credential:${receipt.receiptId.slice(0, 12)}`,
+                electionId: election.id,
+                details: `Encrypted ballot committed to block ${receipt.blockNumber}. Tx: ${receipt.txHash.slice(0, 16)}... ZK Proof verified.`,
+                eventHash: createHash("sha256").update(`${election.id}:${receipt.receiptId}:${receipt.txHash}`).digest("hex"),
+              },
+            });
+
+            return createdVote;
+          },
+          { maxWait: 10000, timeout: 15000 }
+        );
+
+        break;
+      } catch (txErr) {
+        const msg = txErr instanceof Error ? txErr.message : String(txErr);
+        // If unique constraint on index failed, retry next block index
+        if (msg.includes("Unique constraint") && msg.includes("index") && attempts < 3) {
+          await new Promise((r) => setTimeout(r, 50 + Math.random() * 100));
+          continue;
+        }
+        throw txErr;
+      }
     }
 
-    const nextBlock = appendNextBlockchainBlock({
-      chain,
-      payload: JSON.stringify({
-        electionId: election.id,
-        voteId: receipt.voteId,
-        receiptId: receipt.receiptId,
-        txHash: receipt.txHash,
-        encryptedBallot: encryptedBallot.ciphertext,
-        ballotNonce: encryptedBallot.nonce,
-        ballotAuthTag: encryptedBallot.authTag,
-        ballotProof: encryptedBallot.proof,
-        zkProof: zkVoteProof.proof,
-        blockNumber: receipt.blockNumber,
-        submittedAt: receipt.submittedAt,
-        recoveredFromOfflineBuffer: offlineBuffered,
-      }),
-    });
-
-    const vote = await prisma.$transaction(async (transaction) => {
-      // Identity / ballot separation:
-      // Record voter participation (1 person 1 vote) separate from anonymous encrypted ballot
-      await transaction.electionVoterParticipation.create({
-        data: { electionId: election.id, voterId: user.id, votedAt: new Date() },
-      });
-
-      const createdVote = await transaction.electionVote.create({
-        data: {
-          id: receipt.voteId,
-          electionId: election.id,
-          receiptId: receipt.receiptId,
-          txHash: receipt.txHash,
-          encryptedBallot: encryptedBallot.ciphertext,
-          ballotNonce: encryptedBallot.nonce,
-          ballotAuthTag: encryptedBallot.authTag,
-          ballotProof: encryptedBallot.proof,
-          zkProof: zkVoteProof.proof,
-          blockNumber: receipt.blockNumber,
-          submittedAt: receipt.submittedAt,
-        },
-      });
-
-      await transaction.electionBlockchainBlock.create({
-        data: {
-          electionId: election.id,
-          index: nextBlock.index,
-          previousHash: nextBlock.previousHash,
-          payload: nextBlock.payload,
-          hash: nextBlock.hash,
-          timestamp: new Date(nextBlock.timestamp),
-        },
-      });
-
-      // Append-oriented audit log
-      await transaction.auditLog.create({
-        data: {
-          eventType: "BALLOT_ACCEPTED",
-          actorReference: `anonymous_credential:${receipt.receiptId.slice(0, 12)}`,
-          electionId: election.id,
-          details: `Encrypted ballot committed to block ${receipt.blockNumber}. Tx: ${receipt.txHash.slice(0, 16)}... ZK Proof verified.`,
-          eventHash: createHash("sha256").update(`${election.id}:${receipt.receiptId}:${receipt.txHash}`).digest("hex"),
-        },
-      });
-
-      return createdVote;
-    });
+    if (!voteRecord || !nextBlock) {
+      throw new Error("The ballot could not be recorded after multiple attempts.");
+    }
 
     if (contentType.includes("application/json")) {
-      return NextResponse.json({ ok: true, vote, receipt, block: nextBlock }, { status: 201 });
+      return NextResponse.json({ ok: true, vote: voteRecord, receipt, block: nextBlock }, { status: 201 });
     }
 
     const params = new URLSearchParams({
@@ -250,9 +275,27 @@ export async function POST(request: Request, context: { params: Promise<{ electi
 
     return NextResponse.redirect(new URL(`/portal?${params.toString()}`, request.url));
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The ballot could not be recorded.";
+    const rawMessage = error instanceof Error ? error.message : "";
+    let message = "The ballot could not be recorded.";
+    let status = 500;
+
+    if (
+      rawMessage.includes("ElectionVoterParticipation") ||
+      rawMessage.includes("voterId") ||
+      rawMessage.includes("already cast") ||
+      rawMessage.includes("hasExistingVote")
+    ) {
+      message = "You have already cast a ballot in this election.";
+      status = 409;
+    } else if (rawMessage.includes("commitment already recorded")) {
+      message = "This vote commitment has already been recorded on-chain.";
+      status = 409;
+    } else if (error instanceof Error && error.message) {
+      message = error.message;
+    }
+
     if (contentType.includes("application/json")) {
-      return NextResponse.json({ error: message }, { status: 500 });
+      return NextResponse.json({ error: message }, { status });
     }
     return NextResponse.redirect(new URL("/portal?error=" + encodeURIComponent(message), request.url));
   }
