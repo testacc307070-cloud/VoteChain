@@ -162,7 +162,7 @@ export async function registerStudentVoter(input: RegisterVoterInput): Promise<R
       });
 
       return user;
-    });
+    }, { maxWait: 15000, timeout: 20000 });
 
     // 9. Send verification email via Gmail SMTP
     const emailResult = await sendVerificationEmail({
@@ -246,7 +246,7 @@ export async function verifyEmailToken(rawToken: string): Promise<VerifyTokenRes
           eventHash: createHash("sha256").update(`${tokenRecord.id}:${tokenRecord.userId}:${Date.now()}`).digest("hex"),
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 20000 });
 
     return { success: true, email: tokenRecord.user.email };
   } catch (error) {
@@ -317,7 +317,7 @@ export async function resendVerificationEmailByEmail(rawEmail: string, baseUrl?:
           eventHash: createHash("sha256").update(`${user.id}:${tokenHash}:${Date.now()}`).digest("hex"),
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 20000 });
 
     await sendVerificationEmail({
       to: user.email,
