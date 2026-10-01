@@ -1,213 +1,181 @@
-# How VoteChain Works: Complete Conceptual & Technical Guide
+# How VoteChain Works: Complete Conceptual & Technical Architecture Guide
 
-This document provides a comprehensive, end-to-end explanation of how the **VoteChain** electronic voting system operates, based on the **actual, audited production implementation** in the repository.
+This document provides a comprehensive technical walkthrough of the **VoteChain** electronic voting system based on the final, deployed, and verified cloud implementation.
 
 ---
 
-## 1. High-Level Architecture
+## 1. System Overview & Deployment Topology
 
-VoteChain is an end-to-end verifiable electronic voting system designed for institutional elections (specifically PSG College of Technology's `@psgtech.ac.in` domain). The system runs across four main tiers:
+VoteChain operates as a distributed, privacy-preserving electronic voting system across four tiers:
+
+1. **Client Tier (Web Browser)**:
+   - Built with **Next.js 16 (App Router)** and **React 19**.
+   - Executes client-side **BabyJubjub CDS Zero-Knowledge proofs** and **WebCrypto AES-256-GCM** encryption.
+   - Manages durable local offline buffering via **IndexedDB** (`VoteChainOfflineDB`).
+2. **Application Server Tier (Vercel Serverless)**:
+   - Enforces HMAC-SHA256 signed session cookies, Content Security Policy, and CSRF same-origin guards.
+   - Orchestrates Zero-Knowledge proof verification, double-blind database writes, and micro-blockchain block chaining.
+   - Manages per-election Data Encryption Keys (DEKs) and 2-of-3 Shamir threshold custody.
+3. **Database Tier (Neon PostgreSQL Serverless)**:
+   - Relational persistence across 8 Prisma models.
+   - Decouples voter identity from encrypted ballots (`ElectionVoterParticipation` vs. `ElectionVote`).
+4. **Blockchain Tier (Ethereum Sepolia Testnet)**:
+   - Smart contract [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol) deployed at `0x7339F8B088A2835F26e158c9F96690395D80264D`.
+   - Sponsored by a server-side relayer (`0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`) so voters need zero cryptocurrency or Web3 wallet setup.
+
+---
+
+## 2. Step-by-Step Lifecycle: From Registration to Certified Tally
 
 ```
-[ Voter / Admin / Authority / Observer Browser ]
-         │
-         │ HTTPS (Vercel Serverless Platform)
-         ▼
-[ Next.js 16 App Router & API Gateway ]
-   ├── Middleware: CSRF Guards, Role Routing, CSP / HSTS Headers
-   ├── Cryptographic Engines: AES-256-GCM, BabyJubjub CDS ZKP, Shamir GF(256)
-   │
-   ├── Database Tier: Neon Serverless PostgreSQL (Singapore ap-southeast-1)
-   │     ├── Users, Passwords (Bcrypt 12 rounds), VerificationTokens
-   │     ├── Elections, Candidates, Eligibility Whitelists
-   │     ├── Decoupled Voter Participations (1 participation per voter)
-   │     ├── Anonymous Encrypted Ballots (candidateId = null)
-   │     └── Micro-Blockchain Blocks & Audit Trail
-   │
-   ├── Blockchain Tier: Ethereum Sepolia Public Testnet (Chain ID 11155111)
-   │     ├── Smart Contract: VoteChainLedger.sol (0x7339F8B088A2835F26e158c9F96690395D80264D)
-   │     └── Immutable Commitment Registry: commitmentUsed(keccak256(ciphertext:proof))
-   │
-   └── Client-Side Offline Engine: Browser IndexedDB (VoteChainOfflineDB)
-         ├── WebCrypto AES-256-GCM encryption with PBKDF2 localKeyEnvelope
-         └── Automatic Network Synchronization on 'online' Event
+[ Step 1: Registration & Institutional Verification ]
+  Voter submits Student ID (24CS001) + @psgtech.ac.in email + password
+  Server hashes password with Bcrypt (12 rounds) & sends 15-minute token via Gmail SMTP
+  Voter clicks verification link ──> account marked ACTIVE & emailVerified = true
+
+[ Step 2: Election Management & Eligibility Whitelisting ]
+  Admin creates election ──> Generates 256-bit DEK & splits into 3 Shamir shares
+  Admin uploads official class CSV register ──> ElectionEligibleVoter populated
+  Election state advances: CREATED ──> ACTIVE
+
+[ Step 3: Candidate Selection & Local Encryption ]
+  Voter opens ballot box at /portal
+  ONLINE MODE: Generates BabyJubjub CDS ZK Proof ──> Encrypts with AES-256-GCM
+  OFFLINE MODE: Encrypts with WebCrypto AES-GCM + PBKDF2 envelope ──> Saved to IndexedDB
+
+[ Step 4: Submission & Zero-Knowledge Verification ]
+  Server verifies BabyJubjub CDS Disjunctive Schnorr proof using Poseidon hash
+  Confirms choice is valid candidate in {C1, ..., Cm} without revealing which one
+
+[ Step 5: Double-Blind Database Commitment & Micro-Blockchain Append ]
+  Atomic transaction:
+  • ElectionVoterParticipation records: (electionId, voterId, votedAt)
+  • ElectionVote records: (encryptedBallot, nonce, authTag, proof, candidateId = null)
+  • Micro-blockchain ledger appends block referencing previous block hash
+
+[ Step 6: Ethereum Sepolia Blockchain Mining ]
+  Relayer computes commitment = Keccak256(ciphertext : zkProof)
+  Calls recordVote(electionId, commitment) on Sepolia smart contract
+  Contract enforces require(!commitmentUsed[commitment]) ──> Transaction mined in block
+
+[ Step 7: Cryptographic Receipt Issuance ]
+  Voter receives receipt: (receiptId, recordHash, txHash, blockNumber)
+  recordHash = SHA-256(electionId : voteId : submittedAt)
+
+[ Step 8: Election Closure & Mandatory 2-of-3 Authority Threshold ]
+  Admin sets election status to CLOSED
+  Tallying is locked until 2 of 3 designated trustee authorities submit their key shares
+  Server executes Lagrange polynomial interpolation over GF(256)
+  Reconstructed DEK validated against election keyCommitment
+
+[ Step 9: Anonymous Ballot Decryption & Certified Results ]
+  Server decrypts all ElectionVote rows in memory using reconstructed DEK
+  Candidate totals tallied without any voter identity linkage
+  Certified results published to /results
+
+[ Step 10: Public Receipt & Merkle Tree Inclusion Verification ]
+  Balanced SHA-256 Merkle tree constructed over all vote hashes
+  Any voter or citizen opens /verify without login to verify Merkle inclusion proof
 ```
 
 ---
 
-## 2. Step-by-Step Technical Lifecycle
+## 3. Deep Dive: Core Cryptographic & Security Mechanisms
 
-### Step 1: Voter Registration & Institutional Email Verification
-1. A student registers at `/register` by providing their Full Name, Student ID (e.g. `24CS001`), official PSG Tech email (`student@psgtech.ac.in`), and a strong password.
-2. The server validates institutional credentials in [`src/lib/auth-validation.ts`](src/lib/auth-validation.ts):
-   - Email domain must strictly match `@psgtech.ac.in`.
-   - Student ID must match the format `^[0-9]{2}[A-Za-z0-9]{4,10}$`.
-   - Password must contain at least 8 characters, with uppercase, lowercase, numbers, and special characters.
-3. The password is hashed using **Bcrypt with 12 salt rounds**.
-4. A cryptographically random 32-byte raw token is generated (`rawToken`). Its SHA-256 hash (`tokenHash`) is saved in the `VerificationToken` table with a 24-hour expiration timestamp.
-5. An email is dispatched via **Nodemailer using Gmail SMTP TLS transport** (`votechain.verify@gmail.com`) in [`src/lib/email.ts`](src/lib/email.ts).
-6. When the student clicks the verification link (`/verify-email?token=...`), the server marks `usedAt = new Date()` in an atomic transaction and updates the user's status to `emailVerified = true`. Any reused token is rejected.
+### 3.1 Student Registration & Email Verification
+- **Institutional Domain Requirement**: Registration strictly requires the `@psgtech.ac.in` domain (`src/lib/auth-validation.ts`).
+- **Student ID Format**: Validated against PSG Tech standard convention (2-digit admission year + 2-letter branch code + 3-digit roll number, e.g. `24CS001`).
+- **Single-Use Verification Token**:
+  - A cryptographically random 32-byte hex token is generated.
+  - The SHA-256 hash of the token is stored in the `VerificationToken` table with a 15-minute expiration timestamp.
+  - Verification emails are dispatched via Gmail SMTP (`votechain.verify@gmail.com`).
+  - Upon clicking the link, the token is verified, marked `usedAt = now()`, and the user's `emailVerified` flag is set to `true`. Expired or reused tokens are strictly rejected.
 
----
+### 3.2 Double-Blind Database Secrecy
+VoteChain physically decouples voter identity from the ballot choice in the database schema:
+1. **`ElectionVoterParticipation`**:
+   - Schema: `(id, electionId, voterId, votedAt, createdAt)`
+   - Unique constraint: `@@unique([electionId, voterId])`
+   - Purpose: Enforces one-person-one-vote and prevents double voting. Contains **zero reference** to candidate choice, vote ID, or receipt ID.
+2. **`ElectionVote`**:
+   - Schema: `(id, electionId, encryptedBallot, ballotNonce, ballotAuthTag, ballotProof, zkProof, receiptId, txHash, blockNumber, candidateId = null)`
+   - Purpose: Stores the anonymous encrypted ballot. `candidateId` is strictly `null` (anonymized). There are **no foreign keys or correlation columns** linking an `ElectionVote` record back to a `User` or `ElectionVoterParticipation` row.
 
-### Step 2: Multi-Factor Voter Eligibility (Class Whitelists)
-1. The election administrator uploads an official class eligibility CSV register (e.g. Computer Science Class A) in [`src/lib/csv-eligibility.ts`](src/lib/csv-eligibility.ts).
-2. The CSV parser validates header formats, removes duplicates, checks institutional email domains, and populates the `ElectionEligibleVoter` table for that specific `electionId`.
-3. When a voter enters the voting portal (`/portal`), the server executes [`checkVoterElectionEligibility`](src/lib/eligibility.ts):
-   - **Account Verification**: Is the account status `ACTIVE` and `emailVerified == true`?
-   - **Whitelist Inclusion**: Is the voter's Student ID and email in `ElectionEligibleVoter` for this election?
-   - **Active Window**: Is the current server time between `election.startTime` and `election.endTime`?
-   - **Participation History**: Has the voter already participated in this election?
+### 3.3 Zero-Knowledge Proofs (BabyJubjub CDS Schnorr NIZKP)
+To prevent ballot manipulation without compromising voter secrecy, VoteChain uses a Cramer-Damgård-Schoenmakers (CDS) 1-of-$N$ Disjunctive Non-Interactive Zero-Knowledge Proof on the twisted Edwards **BabyJubjub curve** with the **Poseidon hash function** (`src/lib/zk-proof.ts`):
+- For valid candidate public keys $P_1, P_2, \dots, P_m$:
+  - For the voter's chosen candidate $k$, a real Schnorr announcement is computed: $A_k = r \cdot G$.
+  - For each non-selected candidate $i \neq k$, simulated announcements and responses are generated: $A_i = s_i \cdot G + c_i \cdot P_i$.
+  - The Fiat-Shamir challenge is computed: $ch = \text{Poseidon}(P_1, \dots, P_m, A_1, \dots, A_m)$.
+  - The real challenge is derived: $c_k = ch - \sum_{i \neq k} c_i \pmod q$.
+  - The response is computed: $s_k = r + c_k \cdot x \pmod q$.
+- **Verification**: The verifier verifies $\sum c_i = ch \pmod q$ and $s_i \cdot G + c_i \cdot P_i = A_i$ for all $i$. The verifier confirms that the vote is a valid candidate selection while mathematically learning zero bits of information about which candidate was selected.
 
----
+### 3.4 Per-Election DEK & 2-of-3 Shamir Threshold Key Custody
+- **Per-Election Key**: Every election generates a unique 256-bit cryptographically random Data Encryption Key (DEK). A SHA-256 commitment of the key is stored on `Election.keyCommitment`.
+- **Shamir's Secret Sharing over $\text{GF}(256)$**:
+  - The 32-byte DEK is split into 3 shares using high-entropy polynomials over Galois Field $\text{GF}(2^8)$ with irreducible polynomial $P(x) = x^8 + x^4 + x^3 + x + 1$ (`0x11b`).
+  - Shares are serialized as `keyshare:<electionId>:<x>:<y_base64url>`.
+  - Exactly one share is assigned to each of 3 designated trustee authorities.
+- **Mandatory Threshold Reconstruction**:
+  - Decryption is completely locked while the election is active.
+  - When the election closes, authorities submit their key shares.
+  - Reconstructing the DEK requires at least 2 distinct valid authority shares via Lagrange interpolation over $\text{GF}(256)$:
+    $$S = \sum_{j=1}^{k} y_j \prod_{m \neq j} \frac{x_m}{x_m \oplus x_j}$$
+  - The reconstructed key must match the SHA-256 `keyCommitment`.
+  - 0 shares, 1 share, duplicate shares (A+A), tampered shares, and wrong-election shares are strictly rejected.
 
-### Step 3: Candidate Selection & Client-Side Encryption (AES-256-GCM)
-1. When the voter selects a candidate, the system generates a cryptographically secure 12-byte random nonce (`voteId`).
-2. The candidate selection is encrypted using **AES-256-GCM** in [`src/lib/encrypted-ballot.ts`](src/lib/encrypted-ballot.ts):
-   - **Ciphertext**: The AES-GCM encrypted candidate identifier string.
-   - **Authentication Tag**: A 16-byte GCM authentication tag ensuring ciphertext integrity.
-   - **Authenticated Additional Data (AAD)**: The `electionId` is bound as AAD so a ballot cannot be intercepted and replayed in a different election.
+### 3.5 Real Persistent Offline Voting (Phase 13 Engine)
+VoteChain includes a durable client-side offline voting engine (`src/lib/offline-storage.ts`, `src/lib/offline-encryption.ts`, `src/lib/offline-sync.ts`):
+1. **Network Disruption Detection**: Real `navigator.onLine` checks and `online`/`offline` window events.
+2. **Local Device Encryption**: When offline, the ballot is encrypted locally via the browser's native **WebCrypto AES-256-GCM** API. The ephemeral encryption key is sealed in a local envelope using PBKDF2 with SHA-256 derived from the device salt and election ID (`localKeyEnvelope`).
+3. **Durable Persistence**: The encrypted vote is stored in browser **IndexedDB** (`VoteChainOfflineDB`, object store `pending_votes`). It survives page reloads, tab closures, and browser restarts.
+4. **Zero Confidentiality Leakage**: Zero plaintext candidate choices or server secrets are stored on disk.
+5. **Auto-Synchronization**: When internet connectivity returns, the background synchronizer unseals the ballot in memory, submits it to the backend, verifies the ZK proof, mines it to Ethereum Sepolia, receives the real receipt, and marks the local queue status as `CONFIRMED`.
+6. **Replay Protection**: If a synchronized vote is submitted again, the server rejects it with HTTP 409 Conflict (`ALREADY_VOTED`).
 
----
+### 3.6 Micro-Blockchain & Ethereum Sepolia Dual-Ledger
+VoteChain maintains a dual-ledger architecture:
+1. **Internal Micro-Blockchain**:
+   - Stored in the `ElectionBlockchainBlock` table.
+   - Every vote appends a block linking to the previous block hash:
+     $$\text{hash} = \text{SHA-256}(\text{index} : \text{timestamp} : \text{previousHash} : \text{payload})$$
+   - Continuous chain integrity is audited in the Observer Dashboard (`/observer`).
+2. **Ethereum Sepolia Smart Contract**:
+   - Smart contract `VoteChainLedger.sol` on Ethereum Sepolia.
+   - Commitment: $\text{commitment} = \text{Keccak-256}(\text{ciphertext} : \text{zkProof})$.
+   - Enforces on-chain replay protection via `commitmentUsed[commitment]`.
+   - Once mined, the transaction hash and block number are embedded in the voter's receipt.
 
-### Step 4: Zero-Knowledge Proof of Valid Ballot Choice
-To prevent voters from submitting invalid candidate IDs or corrupt data while preserving complete ballot privacy:
-- VoteChain implements a Cramer-Damgård-Schoenmakers (CDS) 1-out-of-$N$ Disjunctive Non-Interactive Zero-Knowledge Proof (NIZKP) on the **BabyJubjub twisted Edwards elliptic curve** with the **Poseidon algebraic hash function** ([`src/lib/zk-proof.ts`](src/lib/zk-proof.ts)):
-  1. The prover represents the election's allowed candidate set as $\{C_1, C_2, \dots, C_m\}$.
-  2. For the voter's chosen candidate $C_w$, a real Schnorr commitment and announcement are generated using secret randomness.
-  3. For all $m - 1$ unselected candidate branches, simulated challenges and responses are computed so they satisfy the verification equations without revealing which branch was real.
-  4. The Fiat-Shamir heuristic binds all candidate commitments into an overall challenge:
-     $$ch = \text{Poseidon}(R_1, R_2, \dots, R_m)$$
-  5. The verifier validates the sum of challenges $\sum c_i = ch$ and verifies the Schnorr relation for every branch.
-  6. **Privacy Guarantee**: The verifier confirms mathematically that the ballot commits to exactly one allowed candidate without learning which candidate was selected.
-
----
-
-### Step 5: Double-Blind Database Separation (Voter Secrecy)
-VoteChain decouples voter identity from ballot choices through physical table separation in [`prisma/schema.prisma`](prisma/schema.prisma):
-
-1. **`ElectionVoterParticipation` Table**:
-   - Stores: `(id, electionId, voterId, votedAt, createdAt)`
-   - Purpose: Records *that* a student voted, enforcing the one-person-one-vote rule.
-   - Contains **zero reference** to vote ID, candidate ID, ciphertext, receipt, or transaction hash.
-2. **`ElectionVote` Table**:
-   - Stores: `(id, electionId, voterId, candidateId, encryptedBallot, ballotNonce, ballotAuthTag, ballotProof, zkProof, blockNumber, submittedAt)`
-   - **Anonymization**: In the production voting flow, `candidateId` is strictly set to **`null`**.
-   - Contains only the ciphertext and cryptographic proofs.
-   - It is mathematically impossible to link a voter ID to their candidate selection from the database logs.
-
----
-
-### Step 6: Real Persistent Offline Voting & Auto-Sync (Phase 13)
-When a voter experiences internet disruption while voting:
-1. **Durable Browser Storage**: The vote is saved to **IndexedDB** (`VoteChainOfflineDB`, object store `pending_votes`) in [`src/lib/offline-storage.ts`](src/lib/offline-storage.ts). Unlike `localStorage` or memory, this survives browser crashes, tab closure, and power loss.
-2. **Client-Side AES-256-GCM Envelope**: The ballot choice is encrypted client-side using WebCrypto (`crypto.subtle`). An ephemeral key is generated, and sealed into a local envelope (`localKeyEnvelope`) derived via PBKDF2 from a device salt and `electionId` in [`src/lib/offline-encryption.ts`](src/lib/offline-encryption.ts).
-3. **Zero Plaintext Leakage**: Zero candidate names or IDs are stored in plaintext on disk; zero server secrets (`BALLOT_ENCRYPTION_KEY`, DEKs, private keys) exist in client storage.
-4. **UI State Machine**: The UI strictly displays `"Vote securely stored locally — waiting for internet"` (never `"Vote confirmed"` while in local queue).
-5. **Automatic Synchronization**: [`src/lib/offline-sync.ts`](src/lib/offline-sync.ts) listens for the browser `online` event. When network connectivity returns:
-   - The pending ballot is unsealed in memory.
-   - The ZK proof is verified.
-   - The ballot is submitted to the backend and mined to Ethereum Sepolia.
-   - The confirmed receipt is stored and the queue item is marked `CONFIRMED`.
-
----
-
-### Step 7: Public Blockchain Recording (Ethereum Sepolia)
-1. The server computes a cryptographic commitment over the ciphertext and ZK proof:
-   $$\text{commitment} = \text{Keccak256}(\text{ciphertext} : \text{zkProof})$$
-2. The server relayer (`0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`) submits an Ethereum transaction to [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol) at address `0x7339F8B088A2835F26e158c9F96690395D80264D`:
-   ```solidity
-   function recordVote(bytes32 electionId, bytes32 commitment) external;
-   ```
-3. The smart contract validates replay protection on-chain:
-   ```solidity
-   require(!commitmentUsed[commitment], "Vote commitment already recorded");
-   commitmentUsed[commitment] = true;
-   emit VoteRecorded(electionId, commitment, msg.sender, block.timestamp);
-   ```
-4. The transaction confirms on Ethereum Sepolia, producing an immutable transaction hash and block number.
+### 3.7 Balanced SHA-256 Merkle Inclusion Proofs
+- When an election closes and tallies are finalized, all cast ballot commitments are arranged as the leaves of a balanced binary SHA-256 Merkle tree (`src/lib/integrity.ts`).
+- The Merkle root is calculated and published.
+- Any voter can enter their receipt ID at `/verify` to receive a logarithmic inclusion proof:
+  - The verifier hashes the voter's receipt along the sibling hash path:
+    $$H_{\text{parent}} = \text{SHA-256}(H_{\text{left}} : H_{\text{right}})$$
+  - If the computed hash matches the certified Merkle root, it proves mathematically that the voter's ballot was included in the official tally without revealing the voter's candidate selection.
 
 ---
 
-### Step 8: Deterministic Cryptographic Receipts
-Upon mining, the voter is issued a cryptographic receipt ([`src/lib/voting.ts`](src/lib/voting.ts)):
-- **Receipt ID**: e.g. `RCPT-FE30674FB018`
-- **Record Hash**: $\text{recordHash} = \text{SHA-256}(\text{electionId} : \text{voteId} : \text{submittedAt})$
-- **Sepolia Transaction Hash**: e.g. `0x3571994fb08cb269a5dea627643f39ac43d8da4b5a8d84dc0a4928c50819588a`
-- **Block Number**: e.g. `#11821078`
+## 4. Implementation Status Matrix
 
-The receipt proves that the voter's ballot is recorded on the blockchain without revealing who they voted for.
-
----
-
-### Step 9: Per-Election Keys & Mandatory 2-of-3 Threshold Decryption
-1. **Per-Election DEK Architecture (Phase 9.1)**: Each election generates a distinct 256-bit AES key. The key is committed on election creation via SHA-256 (`keyCommitment`) and stored encrypted (`encryptedMasterKey`) in [`src/lib/election-keys.ts`](src/lib/election-keys.ts).
-2. **2-of-3 Shamir Secret Sharing (Phase 9.2)**: In [`src/lib/authority.ts`](src/lib/authority.ts), the master DEK is split into 3 shares over Galois Field $\text{GF}(256)$ using the AES irreducible polynomial $P(x) = x^8 + x^4 + x^3 + x + 1$ ($0x11b$).
-3. **Share Custody**: Each of the 3 designated Authority Trustees receives exactly 1 share bound to the election ID (`keyshare:electionId:x:shareBytes`).
-4. **Mandatory Threshold Quorum (Phase 9.3)**:
-   - When the election closes, authorities log in to `/authority` and approve the election tally.
-   - The tally route strictly requires approvals from $\ge 2$ distinct authorities.
-   - 0 shares, 1 share, duplicate approvals from the same authority (A+A), tampered shares, and foreign election shares are strictly rejected.
-   - Once 2 valid shares are received, Lagrange interpolation over $\text{GF}(256)$ reconstructs the secret DEK:
-     $$S = \sum_{j=1}^{k} y_j \prod_{m \neq j} \frac{x_m}{x_m \oplus x_j}$$
-   - The reconstructed key is validated against the election's `keyCommitment`.
-   - All encrypted ballots in `ElectionVote` are decrypted in memory, candidate totals are counted, and the certified result is published.
+| Component | Status | Production Implementation Details |
+| :--- | :--- | :--- |
+| **Institutional Email Verification** | **Production** | `@psgtech.ac.in` validation, Gmail SMTP, single-use 15m tokens (`src/lib/registration.ts`). |
+| **Authentication & Role Guards** | **Production** | Bcrypt (12 rounds), HMAC session cookies, 4 role guards (`src/lib/role-routing.ts`). |
+| **Cloud PostgreSQL Database** | **Production** | Neon Serverless PostgreSQL with Prisma Client 6.12.0 and connection pooling. |
+| **Vercel Cloud Deployment** | **Production** | Next.js 16.3.6 App Router, Turbopack, production security headers, CSRF origin checks. |
+| **Double-Blind Secrecy** | **Production** | Physical database separation between participation and anonymous encrypted ballots. |
+| **Per-Election DEK Architecture** | **Production** | Unique 256-bit random key per election + SHA-256 key commitment (`src/lib/election-keys.ts`). |
+| **2-of-3 Threshold Authority Custody** | **Production** | Shamir $\text{GF}(256)$ sharing, 3 trustees, mandatory 2-of-3 quorum for tallies (`src/lib/authority.ts`). |
+| **Zero-Knowledge Proofs** | **Production** | BabyJubjub CDS 1-of-$N$ Schnorr NIZKP with Poseidon hashing via `circomlibjs` (`src/lib/zk-proof.ts`). |
+| **Ethereum Sepolia Blockchain** | **Production** | `VoteChainLedger.sol` on Sepolia testnet at `0x7339F8B088A2835F26e158c9F96690395D80264D`. |
+| **Persistent Offline Voting** | **Production** | Client-side IndexedDB queue, WebCrypto AES-256-GCM, auto-sync upon `online` event. |
+| **Merkle Universal Verifiability** | **Production** | Balanced SHA-256 Merkle tree, inclusion proof generator, public verifier (`/verify`). |
+| **Micro-Blockchain Ledger** | **Production** | Chained block audit trail, SHA-256 previousHash links, tamper detection simulation (`/observer`). |
 
 ---
 
-### Step 10: Merkle Tree Universal & Individual Verifiability
-1. When results are published, all cast ballot commitments are arranged as the leaves of a balanced SHA-256 Merkle tree in [`src/lib/integrity.ts`](src/lib/integrity.ts).
-2. The Merkle root is calculated and committed:
-   $$\text{Root} = \text{SHA256}(\text{Hash}_{\text{left}} : \text{Hash}_{\text{right}})$$
-3. **Individual Verifiability**: Any student can navigate to `/verify` without logging in, enter their receipt, and receive their Merkle inclusion proof (sibling hash path).
-4. **Universal Verifiability**: Anyone can verify that the published candidate tallies equal the total leaves of the Merkle tree.
+## 5. Summary
 
----
-
-### Step 11: Application Micro-Blockchain & Tamper Detection
-1. In addition to Ethereum Sepolia, VoteChain maintains an internal micro-blockchain ledger per election in `ElectionBlockchainBlock` ([`src/lib/blockchain.ts`](src/lib/blockchain.ts)).
-2. Each block commits the SHA-256 hash of the preceding block:
-   $$\text{blockHash} = \text{SHA-256}(\text{index} : \text{timestamp} : \text{previousHash} : \text{payload})$$
-3. In the Public Observer Dashboard (`/observer`), an interactive **Tamper Detection Simulation** allows observers to simulate malicious database tampering.
-4. The system validates the chain head: if any payload or hash is modified, the cryptographic chain breaks, and a **CRITICAL / TAMPER DETECTED** alert is immediately displayed.
-
----
-
-## 3. Implementation Status Summary
-
-| Architectural Component | Status | Technical Details |
-| :--- | :---: | :--- |
-| **Cloud PostgreSQL Database** | **Fully Implemented** | Neon Serverless PostgreSQL (`ap-southeast-1`) with 7 relational Prisma models and connection pooling resilience |
-| **Authentication & RBAC** | **Fully Implemented** | Bcrypt (12 rounds), HMAC-SHA256 signed session cookies, 4 isolated role dashboards (`/portal`, `/admin`, `/authority`, `/observer`) |
-| **Institutional Email Verification** | **Fully Implemented** | Nodemailer with Gmail SMTP (`votechain.verify@gmail.com`), PSG Tech domain checking, single-use 24h tokens |
-| **Class Eligibility Whitelists** | **Fully Implemented** | Admin CSV import, deduplication, election-bound voter register whitelist |
-| **One-Person-One-Vote** | **Fully Implemented** | Database unique constraint `@@unique([electionId, voterId])` on `ElectionVoterParticipation` |
-| **Double-Blind Voter Privacy** | **Fully Implemented** | Complete decoupling between participation records and anonymous votes (`candidateId = null`) |
-| **Per-Election DEK Architecture** | **Fully Implemented** | Unique 256-bit DEK generated per election, SHA-256 `keyCommitment`, envelope-sealed storage |
-| **AES-256-GCM Ballot Encryption** | **Fully Implemented** | Authenticated symmetric cipher with random 12-byte IVs, 16-byte auth tags, and `electionId` AAD binding |
-| **Zero-Knowledge Proofs** | **Fully Implemented** | BabyJubjub elliptic curve + Poseidon hash CDS 1-of-N disjunctive Schnorr NIZKP (`circomlibjs`) |
-| **2-of-3 Threshold Key Custody** | **Fully Implemented** | Shamir's Secret Sharing over $\text{GF}(256)$ ($0x11b$ polynomial); mandatory $\ge 2$ authority approval for final tally |
-| **Ethereum Sepolia Blockchain** | **Fully Implemented** | `VoteChainLedger.sol` deployed at `0x7339F8B088A2835F26e158c9F96690395D80264D`; duplicate commitment protection |
-| **Real Persistent Offline Voting** | **Fully Implemented** | IndexedDB (`VoteChainOfflineDB`) persistent queue, client WebCrypto AES-GCM, PBKDF2 envelopes, automatic sync on reconnect |
-| **Cryptographic Receipts** | **Fully Implemented** | Deterministic SHA-256 receipt generation, public receipt verification at `/verify` |
-| **Merkle Tree Inclusion Proofs** | **Fully Implemented** | Balanced SHA-256 Merkle tree calculation, Merkle root commitment, individual inclusion proof verifier |
-| **Micro-Blockchain Ledger** | **Fully Implemented** | Internal SHA-256 chained block ledger with full continuity verification and tamper detection simulation |
-| **Security Headers & CSRF** | **Fully Implemented** | Nonce-based CSP, HSTS, `X-Frame-Options: DENY`, `nosniff`, strict referrer, origin/referer CSRF validation |
-
----
-
-## 4. Security & Privacy Guarantees vs. Known Limitations
-
-### What VoteChain Guarantees:
-- **Ballot Secrecy**: No database administrator, observer, or single authority trustee can read individual ballot choices.
-- **One-Person-One-Vote**: A voter can never cast more than one ballot in the same election.
-- **Ballot Validity Without Choice Leakage**: ZK proofs prove that every ballot represents an authorized candidate without revealing which candidate.
-- **Tamper Evidence**: Any modification to database records or micro-blockchain blocks is immediately detected by Merkle proofs and hash chain validation.
-- **On-Chain Recording**: Every vote is committed to Ethereum Sepolia, providing immutable proof of recording.
-- **Offline Durability**: Ballots cast while offline survive browser crashes and synchronize automatically when the network returns.
-
-### What VoteChain Does Not Claim:
-- **National Election Suitability**: VoteChain is an educational research prototype. It is not certified for governmental or legally binding civic elections.
-- **Physical Biometric Identity**: Email verification proves control of an institutional `@psgtech.ac.in` email account; it does not independently verify physical human presence.
-- **Coercion Resistance**: While the system prevents others from reading a ballot, receipts prove that a vote was cast. It does not provide receipt-free coercion resistance.
-- **Decentralized Voter Gas**: Transactions are relayed by the server's sponsored signer (`0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`) to eliminate MetaMask requirements for students.
+VoteChain implements an end-to-end verifiable classroom electronic voting system that combines Zero-Knowledge proofs, double-blind database architecture, multi-authority threshold cryptography, Ethereum Sepolia blockchain commitments, and persistent offline recovery into a unified, open-source stack.
