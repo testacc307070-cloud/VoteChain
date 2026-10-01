@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
+import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
 
 export default async function ElectionDetailPage({
   params,

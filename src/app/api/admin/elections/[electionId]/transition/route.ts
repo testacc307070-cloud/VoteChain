@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { ElectionStatus } from "@prisma/client";
-import { requireAdminApi } from "@/lib/admin-api";
-import { prisma } from "@/lib/prisma";
-import { evaluateAuthorityThreshold } from "@/lib/authority";
-import { buildElectionIntegritySnapshot } from "@/lib/integrity";
+import { requireAdminApi } from "@/backend/voting/admin-api";
+import { prisma } from "@/database/prisma";
+import { evaluateAuthorityThreshold } from "@/security/threshold";
+import { buildElectionIntegritySnapshot } from "@/verification/merkle";
 
 export const runtime = "nodejs";
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { prisma } from "../src/lib/prisma";
-import { checkVoterElectionEligibility } from "../src/lib/eligibility";
+import { prisma } from "@/database/prisma";
+import { checkVoterElectionEligibility } from "@/backend/voting/eligibility";
 
 function loadEnv() {
   const fullPath = resolve(".env");

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { prisma } from "../src/lib/prisma";
+import { prisma } from "@/database/prisma";
 
 function loadEnv() {
   const fullPath = resolve(".env");

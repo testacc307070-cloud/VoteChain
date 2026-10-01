@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { buildElectionIntegritySnapshot } from "@/lib/integrity";
-import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/lib/authority";
-import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
-import { buildElectionQrReference } from "@/lib/qr";
-import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
-import QrCode from "@/components/qr-code";
-import TamperDemo from "@/components/tamper-demo";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
+import { buildElectionIntegritySnapshot } from "@/verification/merkle";
+import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/security/threshold";
+import { getElectionEncryptionKey, isLegacyElection } from "@/security/election-keys";
+import { buildElectionQrReference } from "@/verification/qr";
+import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
+import QrCode from "@/frontend/components/qr-code";
+import TamperDemo from "@/frontend/components/tamper-demo";
 
 export default async function ResultsPage() {
   const user = await getCurrentUser();

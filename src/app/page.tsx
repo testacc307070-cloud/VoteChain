@@ -1,11 +1,11 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/database/prisma";
 import DashboardClient, {
   type DashboardMetrics,
   type ActivityItem,
   type UserItem,
-} from "@/components/dashboard-client";
-import { getCurrentUser } from "@/lib/session";
+} from "@/frontend/components/dashboard-client";
+import { getCurrentUser } from "@/backend/auth/session";
 
 export default async function HomePage() {
   const user = await getCurrentUser();

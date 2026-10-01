@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
-import { buildElectionIntegritySnapshot } from "@/lib/integrity";
-import TamperDemo from "@/components/tamper-demo";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
+import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
+import { buildElectionIntegritySnapshot } from "@/verification/merkle";
+import TamperDemo from "@/frontend/components/tamper-demo";
 import { ShieldCheck, Eye, Lock, FileText, CheckCircle2 } from "lucide-react";
 
 export default async function ObserverPage() {

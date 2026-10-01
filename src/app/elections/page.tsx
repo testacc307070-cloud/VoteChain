@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import ElectionManager from "@/components/election-manager";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+import ElectionManager from "@/frontend/components/election-manager";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
 
 export default async function ElectionsPage() {
   const user = await getCurrentUser();

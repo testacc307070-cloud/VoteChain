@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resendVerificationEmailByEmail } from "@/lib/registration";
+import { resendVerificationEmailByEmail } from "@/backend/auth/registration";
 
 export const runtime = "nodejs";
 

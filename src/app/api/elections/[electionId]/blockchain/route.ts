@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { buildBlockchainSummary, verifyBlockchainChain } from "@/lib/blockchain";
+import { prisma } from "@/database/prisma";
+import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
 
 export const runtime = "nodejs";
 

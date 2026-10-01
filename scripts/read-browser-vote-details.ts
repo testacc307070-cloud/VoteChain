@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { prisma } from "../src/lib/prisma";
-import { verifyOnChainCommitment } from "../src/lib/ethereum";
+import { prisma } from "@/database/prisma";
+import { verifyOnChainCommitment } from "@/blockchain/ethereum";
 import { JsonRpcProvider, formatEther, keccak256, toUtf8Bytes } from "ethers";
 
 function loadEnv() {

@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { checkVoterElectionEligibility } from "@/lib/eligibility";
-import VoterPortalClient from "@/components/voter-portal-client";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { checkVoterElectionEligibility } from "@/backend/voting/eligibility";
+import VoterPortalClient from "@/frontend/components/voter-portal-client";
 
 export default async function PortalPage({
   searchParams,

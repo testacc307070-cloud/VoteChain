@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
-import { setSessionCookie } from "@/lib/session";
-import { getRoleLandingRoute } from "@/lib/role-routing";
+import { prisma } from "@/database/prisma";
+import { setSessionCookie } from "@/backend/auth/session";
+import { getRoleLandingRoute } from "@/backend/auth/role-routing";
 
 export const runtime = "nodejs";
 

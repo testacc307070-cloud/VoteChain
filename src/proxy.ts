@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isSameOriginRequest } from "@/lib/csrf";
+import { isSameOriginRequest } from "@/security/csrf";
 
 export function proxy(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/")) {

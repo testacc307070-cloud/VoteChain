@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { ElectionStatus } from "@prisma/client";
-import { requireAdminApi } from "@/lib/admin-api";
-import { parseElectionInput } from "@/lib/election-validation";
-import { prisma } from "@/lib/prisma";
-import { generateElectionKey } from "@/lib/election-keys";
+import { requireAdminApi } from "@/backend/voting/admin-api";
+import { parseElectionInput } from "@/backend/voting/election-validation";
+import { prisma } from "@/database/prisma";
+import { generateElectionKey } from "@/security/election-keys";
 
 export const runtime = "nodejs";
 

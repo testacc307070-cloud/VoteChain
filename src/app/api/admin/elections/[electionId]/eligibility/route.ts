@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { requireAdminApi } from "@/lib/admin-api";
-import { prisma } from "@/lib/prisma";
-import { parseEligibilityCsv } from "@/lib/csv-eligibility";
-import { importElectionEligibilityList } from "@/lib/eligibility";
+import { requireAdminApi } from "@/backend/voting/admin-api";
+import { prisma } from "@/database/prisma";
+import { parseEligibilityCsv } from "@/backend/voting/csv-eligibility";
+import { importElectionEligibilityList } from "@/backend/voting/eligibility";
 
 export const runtime = "nodejs";
 

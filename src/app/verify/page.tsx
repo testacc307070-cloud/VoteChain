@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { verifyVoteReceipt } from "@/lib/voting";
-import { createMerkleProof, createMerkleRoot, verifyMerkleProof } from "@/lib/integrity";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { verifyVoteReceipt } from "@/verification/receipts";
+import { createMerkleProof, createMerkleRoot, verifyMerkleProof } from "@/verification/merkle";
 import { ShieldCheck, CheckCircle2 } from "lucide-react";
 
 export default async function VerifyPage({

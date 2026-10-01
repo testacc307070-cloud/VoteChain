@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { UserRole, UserStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
-import { requireAdminApi } from "@/lib/admin-api";
-import { isValidPsgEmail } from "@/lib/auth-validation";
+import { prisma } from "@/database/prisma";
+import { requireAdminApi } from "@/backend/voting/admin-api";
+import { isValidPsgEmail } from "@/backend/auth/auth-validation";
 
 export const runtime = "nodejs";
 

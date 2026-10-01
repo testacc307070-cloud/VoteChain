@@ -69,41 +69,116 @@ VoteChain is deployed across a modern serverless cloud infrastructure:
 
 ---
 
-## 4. Key Files — Where to Look
+## 4. Project Structure
 
-For evaluators, instructors, and security auditors, this table maps each logical component to its actual source file in the repository:
+VoteChain follows a modular, layer-separated architecture designed for pedagogical clarity, code maintainability, and security auditability:
 
-| Logical Category | File Path | Primary Responsibility & Contents |
+```
+VoteChain/
+├── contracts/                        # Solidity smart contract & EVM artifacts
+│   ├── VoteChainLedger.sol           # Core on-chain ballot box with replay protection
+│   └── VoteChainLedger.json          # Compiled contract ABI & bytecode
+│
+├── docs/                             # Architecture specifications & phase audit reports
+│   ├── HOW_VOTECHAIN_WORKS.md        # Deep-dive cryptographic & architectural guide
+│   ├── PHASE_14_FINAL_CLASS_ELECTION_REPORT.md  # 100-voter classroom simulation report
+│   ├── PHASE_15_FINAL_SYSTEM_AUDIT.md # Comprehensive 17-section security audit
+│   ├── VoteChain_Complete_Online_Deployment_Plan.md # Online deployment blueprint
+│   └── VOTECHAIN_PHASE_COMPLETION.md # Complete 15-phase verification matrix
+│
+├── prisma/                           # Database ORM & schema definitions
+│   ├── schema.prisma                 # Double-blind PostgreSQL schema
+│   ├── seed.ts                       # Test elections & roles database seeder
+│   └── migrations/                   # Atomic SQL schema migrations
+│
+├── scripts/                          # Operational & cloud deployment utilities
+│   ├── deploy-contract.ts            # Sepolia contract compilation & deployment
+│   ├── setup-testnet-wallet.ts       # Testnet relayer wallet generation & balance checker
+│   ├── check-db-credentials.ts       # Neon serverless connection verifier
+│   └── inspect-db.ts                 # Database state inspection utility
+│
+├── src/
+│   ├── app/                          # Next.js App Router (UI pages & API endpoints)
+│   │   ├── (pages)                   # /login, /register, /portal, /results, /audit, etc.
+│   │   └── api/                      # REST endpoints for auth, elections, voting
+│   │
+│   ├── frontend/                     # Frontend client layer
+│   │   └── components/               # React UI components (portal, manager, tamper-demo)
+│   │
+│   ├── backend/                      # Server-side business logic
+│   │   ├── auth/                     # Registration, sessions, email tokens, role routing
+│   │   └── voting/                   # Eligibility checks, CSV rosters, election validation
+│   │
+│   ├── database/                     # Database client & connection pooling
+│   │   └── prisma.ts                 # Singleton PrismaClient instance
+│   │
+│   ├── blockchain/                   # Ethereum / Sepolia blockchain integration
+│   │   ├── ethereum.ts               # Sepolia RPC provider, relayer wallet, contract client
+│   │   └── blockchain.ts             # Micro-blockchain block chaining & hash verification
+│   │
+│   ├── security/                     # Cryptography & security primitives
+│   │   ├── encryption.ts             # AES-256-GCM ballot encryption & decryption
+│   │   ├── zk-proof.ts               # BabyJubjub CDS 1-of-K zero-knowledge proofs
+│   │   ├── threshold.ts              # Shamir 2-of-3 GF(256) secret sharing & custody
+│   │   ├── election-keys.ts          # Per-election DEKs & cryptographic key commitments
+│   │   └── csrf.ts                   # Origin verification & anti-CSRF protection
+│   │
+│   ├── offline/                      # Real offline voting & recovery engine
+│   │   ├── indexeddb.ts              # Persistent IndexedDB encrypted ballot queue
+│   │   ├── offline-encryption.ts     # Client WebCrypto AES-GCM local envelope sealer
+│   │   └── sync.ts                   # Background offline-to-online synchronizer
+│   │
+│   └── verification/                 # Verification, receipts & audit
+│       ├── receipts.ts               # Cryptographic receipt generation & verification
+│       ├── merkle.ts                 # Balanced Merkle tree root & inclusion proofs
+│       ├── results.ts                # Election results tallying & decryption
+│       ├── audit.ts                  # Immutable audit log builder
+│       └── qr.ts                     # Receipt verification QR code generator
+│
+└── tests/                            # Automated test suites
+    ├── unit/                         # 21 unit & security test files (143 subtests)
+    ├── contracts/                    # Smart contract automated test suite (6 tests)
+    └── e2e/                          # Full E2E verification & classroom load tests
+```
+
+---
+
+## 5. Key Files — Where to Look
+
+For evaluators, instructors, and security auditors, this table maps each logical area to its final file path:
+
+| Area | Final File Path | Primary Responsibility & Contents |
 | :--- | :--- | :--- |
-| **Frontend / UI** | [`src/app/portal/page.tsx`](src/app/portal/page.tsx) | Voter portal page rendering active election ballots and voting state. |
-| **Frontend / UI** | [`src/components/voter-portal-client.tsx`](src/components/voter-portal-client.tsx) | Client component managing candidate selection, offline queueing, and auto-sync. |
-| **Frontend / UI** | [`src/app/results/page.tsx`](src/app/results/page.tsx) | Certified public election results page with vote distributions and Merkle root. |
-| **Frontend / UI** | [`src/app/verify/page.tsx`](src/app/verify/page.tsx) | Public receipt verifier allowing any citizen/voter to verify receipts without logging in. |
-| **Frontend / UI** | [`src/app/authority/page.tsx`](src/app/authority/page.tsx) | Trustee dashboard for Shamir share custody and 2-of-3 threshold approval. |
-| **Frontend / UI** | [`src/app/observer/page.tsx`](src/app/observer/page.tsx) | Observer audit dashboard with micro-blockchain inspector and tamper demo. |
-| **Authentication** | [`src/lib/registration.ts`](src/lib/registration.ts) | Student registration, institutional domain validation, single-use token lifecycle. |
-| **Authentication** | [`src/lib/session.ts`](src/lib/session.ts) | HMAC-SHA256 signed session cookies, cookie validation, expiration checking. |
-| **Authentication** | [`src/lib/role-routing.ts`](src/lib/role-routing.ts) | Role boundary guards isolating `VOTER`, `ADMIN`, `AUTHORITY`, and `OBSERVER`. |
-| **Voting & Ledger** | [`src/app/api/voter/elections/[electionId]/vote/route.ts`](src/app/api/voter/elections/[electionId]/vote/route.ts) | Core voting API handling ZK validation, encryption, Sepolia relay, and micro-blockchain append. |
-| **Voting & Ledger** | [`src/lib/voting.ts`](src/lib/voting.ts) | Vote submission validator, receipt generator, deterministic receipt hash verifier. |
-| **Voting & Ledger** | [`src/lib/eligibility.ts`](src/lib/eligibility.ts) | Per-election class roster whitelist verifier and voter eligibility checking. |
-| **Encryption** | [`src/lib/encrypted-ballot.ts`](src/lib/encrypted-ballot.ts) | AES-256-GCM ballot encryption with random IV, authTag, and election AAD binding. |
-| **Encryption** | [`src/lib/election-keys.ts`](src/lib/election-keys.ts) | Per-election Data Encryption Key (DEK) generator, master envelope, key commitments. |
-| **Zero-Knowledge** | [`src/lib/zk-proof.ts`](src/lib/zk-proof.ts) | BabyJubjub CDS 1-of-$N$ Schnorr proof generator and server-side verifier via Poseidon. |
-| **Threshold Custody** | [`src/lib/authority.ts`](src/lib/authority.ts) | 2-of-3 Shamir Secret Sharing over $\text{GF}(256)$, share validation, Lagrange interpolation. |
-| **Offline Voting** | [`src/lib/offline-storage.ts`](src/lib/offline-storage.ts) | Browser IndexedDB queue (`VoteChainOfflineDB`), persistent pending vote management. |
-| **Offline Voting** | [`src/lib/offline-encryption.ts`](src/lib/offline-encryption.ts) | WebCrypto AES-256-GCM device encryption, PBKDF2 local key envelope unsealing. |
-| **Offline Voting** | [`src/lib/offline-sync.ts`](src/lib/offline-sync.ts) | Real network restoration listener, in-memory unsealing, server dispatch engine. |
-| **Blockchain** | [`contracts/VoteChainLedger.sol`](contracts/VoteChainLedger.sol) | Solidity smart contract deployed on Ethereum Sepolia for commitments and replay protection. |
-| **Blockchain** | [`src/lib/ethereum.ts`](src/lib/ethereum.ts) | Ethers.js Sepolia RPC relayer, commitment transaction submission, on-chain verifier. |
-| **Blockchain** | [`src/lib/blockchain.ts`](src/lib/blockchain.ts) | Internal micro-blockchain ledger generator, block chaining, and hash continuity checker. |
-| **Integrity & Merkle**| [`src/lib/integrity.ts`](src/lib/integrity.ts) | Balanced SHA-256 Merkle tree generator, root calculator, Merkle inclusion proof validator. |
+| **Frontend UI** | [`src/app/portal/page.tsx`](src/app/portal/page.tsx) | Voter portal page rendering active election ballots and eligibility state. |
+| **Frontend UI** | [`src/frontend/components/voter-portal-client.tsx`](src/frontend/components/voter-portal-client.tsx) | Client component managing candidate selection, offline queueing, and auto-sync. |
+| **Frontend UI** | [`src/app/results/page.tsx`](src/app/results/page.tsx) | Certified public election results page with vote distributions and Merkle root. |
+| **Frontend UI** | [`src/app/verify/page.tsx`](src/app/verify/page.tsx) | Public receipt verifier allowing any citizen/voter to verify receipts without logging in. |
+| **Frontend UI** | [`src/app/authority/page.tsx`](src/app/authority/page.tsx) | Trustee dashboard for Shamir share custody and 2-of-3 threshold approval. |
+| **Frontend UI** | [`src/app/observer/page.tsx`](src/app/observer/page.tsx) | Observer audit dashboard with micro-blockchain inspector and tamper demo. |
+| **Authentication** | [`src/backend/auth/registration.ts`](src/backend/auth/registration.ts) | Student registration, institutional domain validation, single-use token lifecycle. |
+| **Authentication** | [`src/backend/auth/session.ts`](src/backend/auth/session.ts) | HMAC-SHA256 signed session cookies, cookie validation, expiration checking. |
+| **Authentication** | [`src/backend/auth/role-routing.ts`](src/backend/auth/role-routing.ts) | Role boundary guards isolating `VOTER`, `ADMIN`, `AUTHORITY`, and `OBSERVER`. |
+| **Voting API** | [`src/app/api/voter/elections/[electionId]/vote/route.ts`](src/app/api/voter/elections/[electionId]/vote/route.ts) | Core voting API handling ZK validation, encryption, Sepolia relay, and micro-blockchain append. |
+| **Voting Logic** | [`src/backend/voting/voting.ts`](src/backend/voting/voting.ts) | Vote submission validator, receipt generator, deterministic receipt hash verifier. |
+| **Eligibility** | [`src/backend/voting/eligibility.ts`](src/backend/voting/eligibility.ts) | Per-election class roster whitelist verifier and voter eligibility checking. |
+| **Database** | [`src/database/prisma.ts`](src/database/prisma.ts) | Singleton Prisma client with connection pooling for PostgreSQL. |
 | **Database Schema** | [`prisma/schema.prisma`](prisma/schema.prisma) | Relational schema definitions separating `ElectionVote` from `ElectionVoterParticipation`. |
-| **Security Tests** | [`src/lib/phase11-security.test.ts`](src/lib/phase11-security.test.ts) | 29 security and penetration tests (IDOR, role boundaries, CSRF, tampering, injections). |
-| **Threshold Tests** | [`src/lib/threshold-mandatory-9-3.test.ts`](src/lib/threshold-mandatory-9-3.test.ts) | 15 tests verifying mandatory 2-of-3 threshold enforcement and zero global-key fallback. |
-| **Offline Tests** | [`src/lib/offline-voting.test.ts`](src/lib/offline-voting.test.ts) | 9 tests verifying IndexedDB persistence, confidentiality, refresh recovery, and sync. |
-| **Contract Tests** | [`contracts/VoteChainLedger.test.ts`](contracts/VoteChainLedger.test.ts) | 6 smart contract tests verifying registration, commitment recording, replay prevention. |
-| **E2E Simulation** | [`scripts/verify-phase14-final-class-election.ts`](scripts/verify-phase14-final-class-election.ts) | 12-step full class election simulation harness testing 100 voters, Sepolia mining, and tally. |
+| **Ballot Encryption**| [`src/security/encryption.ts`](src/security/encryption.ts) | AES-256-GCM ballot encryption with random IV, authTag, and election AAD binding. |
+| **Election Keys** | [`src/security/election-keys.ts`](src/security/election-keys.ts) | Per-election Data Encryption Key (DEK) generator, master envelope, key commitments. |
+| **Zero-Knowledge** | [`src/security/zk-proof.ts`](src/security/zk-proof.ts) | BabyJubjub CDS 1-of-$N$ Schnorr proof generator and server-side verifier via Poseidon. |
+| **Threshold Custody**| [`src/security/threshold.ts`](src/security/threshold.ts) | 2-of-3 Shamir Secret Sharing over $\text{GF}(256)$, share validation, Lagrange interpolation. |
+| **Offline Storage**| [`src/offline/indexeddb.ts`](src/offline/indexeddb.ts) | Browser IndexedDB queue (`VoteChainOfflineDB`), persistent pending vote management. |
+| **Offline Encryption**| [`src/offline/offline-encryption.ts`](src/offline/offline-encryption.ts) | WebCrypto AES-256-GCM device encryption, PBKDF2 local key envelope unsealing. |
+| **Offline Sync** | [`src/offline/sync.ts`](src/offline/sync.ts) | Real network restoration listener, in-memory unsealing, server dispatch engine. |
+| **Receipts** | [`src/verification/receipts.ts`](src/verification/receipts.ts) | Deterministic receipt hash computation and validation. |
+| **Merkle Trees** | [`src/verification/merkle.ts`](src/verification/merkle.ts) | Balanced SHA-256 Merkle tree generator, root calculator, Merkle inclusion proof validator. |
+| **Smart Contract** | [`contracts/VoteChainLedger.sol`](contracts/VoteChainLedger.sol) | Solidity smart contract deployed on Ethereum Sepolia for commitments and replay protection. |
+| **Blockchain Client**| [`src/blockchain/ethereum.ts`](src/blockchain/ethereum.ts) | Ethers.js Sepolia RPC relayer, commitment transaction submission, on-chain verifier. |
+| **Micro-Ledger** | [`src/blockchain/blockchain.ts`](src/blockchain/blockchain.ts) | Internal micro-blockchain ledger generator, block chaining, and hash continuity checker. |
+| **Unit Tests** | [`tests/unit/`](tests/unit/) | 21 unit and security test suites covering all cryptographic, auth, and voting modules. |
+| **Contract Tests** | [`tests/contracts/VoteChainLedger.test.ts`](tests/contracts/VoteChainLedger.test.ts) | 6 smart contract tests verifying registration, commitment recording, replay prevention. |
+| **E2E Tests** | [`tests/e2e/`](tests/e2e/) | End-to-end integration, load test, offline recovery, and Phase 14 class election simulation tests. |
+| **Documentation** | [`docs/`](docs/) | Complete architecture guides, phase reports, and deployment blueprints. |
 
 ---
 

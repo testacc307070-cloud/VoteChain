@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { buildElectionAuditTrail } from "@/lib/audit";
-import TamperDemo from "@/components/tamper-demo";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { buildElectionAuditTrail } from "@/verification/audit";
+import TamperDemo from "@/frontend/components/tamper-demo";
 import { FileText, ShieldCheck } from "lucide-react";
 
 export default async function AuditPage() {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { registerStudentVoter } from "@/lib/registration";
+import { registerStudentVoter } from "@/backend/auth/registration";
 
 export const runtime = "nodejs";
 

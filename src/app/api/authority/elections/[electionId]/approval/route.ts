@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { ElectionStatus } from "@prisma/client";
-import { getCurrentUser } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
-import { splitElectionSecret } from "@/lib/authority";
-import { getElectionEncryptionKey } from "@/lib/election-keys";
+import { getCurrentUser } from "@/backend/auth/session";
+import { prisma } from "@/database/prisma";
+import { splitElectionSecret } from "@/security/threshold";
+import { getElectionEncryptionKey } from "@/security/election-keys";
 
 export const runtime = "nodejs";
 

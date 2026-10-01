@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { appendNextBlockchainBlock, verifyBlockchainChain } from "@/lib/blockchain";
-import { encryptBallot } from "@/lib/encrypted-ballot";
-import { submitVoteOnChain } from "@/lib/ethereum";
-import { checkVoterElectionEligibility } from "@/lib/eligibility";
-import { createVoteReceipt, validateVoteSubmission } from "@/lib/voting";
-import { createZkVoteProof, verifyZkVoteProof } from "@/lib/zk-proof";
-import { getElectionEncryptionKey } from "@/lib/election-keys";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { appendNextBlockchainBlock, verifyBlockchainChain } from "@/blockchain/blockchain";
+import { encryptBallot } from "@/security/encryption";
+import { submitVoteOnChain } from "@/blockchain/ethereum";
+import { checkVoterElectionEligibility } from "@/backend/voting/eligibility";
+import { createVoteReceipt } from "@/verification/receipts";
+import { validateVoteSubmission } from "@/backend/voting/voting";
+import { createZkVoteProof, verifyZkVoteProof } from "@/security/zk-proof";
+import { getElectionEncryptionKey } from "@/security/election-keys";
 
 export const runtime = "nodejs";
 

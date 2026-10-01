@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
-import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/lib/authority";
-import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
+import { prisma } from "@/database/prisma";
+import { getCurrentUser } from "@/backend/auth/session";
+import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey, stringifyAuthorityStatus } from "@/security/threshold";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
+import { getElectionEncryptionKey, isLegacyElection } from "@/security/election-keys";
 import { KeyRound, ShieldCheck, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 
 export default async function AuthorityPage() {

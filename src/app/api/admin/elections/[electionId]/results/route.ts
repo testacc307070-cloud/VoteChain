@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { requireAdminApi } from "@/lib/admin-api";
-import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/lib/election-results";
-import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey } from "@/lib/authority";
-import { getElectionEncryptionKey, isLegacyElection } from "@/lib/election-keys";
+import { prisma } from "@/database/prisma";
+import { requireAdminApi } from "@/backend/voting/admin-api";
+import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
+import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey } from "@/security/threshold";
+import { getElectionEncryptionKey, isLegacyElection } from "@/security/election-keys";
 
 export const runtime = "nodejs";
 
