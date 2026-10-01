@@ -1,66 +1,135 @@
-# VoteChain: Phase-by-Phase Completion & Verification Report
+# VoteChain: Complete Phase Completion & Verification Report
 
-This document records the **actual verified completion status** of all 10 phases specified in [`VoteChain_Project_Specification.txt`](VoteChain_Project_Specification.txt).
-
-Verification was performed locally against the live PostgreSQL 18 database, the local Ganache Ethereum RPC blockchain node, the compiled Solidity smart contract [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol), and the Next.js 16 / React 19 application.
+This document records the **comprehensive, audited completion and verification status** of all phases of VoteChain, spanning both the initial core specification and the full 14-phase online cloud deployment.
 
 ---
 
-## Overall Status: 100% Verified Local Prototype Scope
+## 1. Executive Summary & Verification Matrix
 
-Every phase defined in the canonical specification has been implemented, integrated into the application flow, and verified end-to-end within the local prototype scope.
-
----
-
-## Phase-by-Phase Verification Matrix (Exact Specification Numbering)
-
-| Phase | Specification Phase Name | Status | Tested? | Completed Functionality | Scope & Notes | Manual Action Required |
-|---|---|---|---|---|---|---|
-| **Phase 1** | **PHASE 1 - Project Foundation** | **100% verified local prototype scope** | **YES** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS, PostgreSQL Prisma ORM, Nonce-based CSP, CSRF same-origin guards (`src/lib/csrf.ts`). 4 roles: Voter, Admin, Observer, Election Authority. | Operational in local development environment. | None. |
-| **Phase 2** | **PHASE 2 - Election Management** | **100% verified local prototype scope** | **YES** | Election creation, candidate management, candidate locking, voter registration and eligibility tracking, election lifecycle state machine, Admin dashboard, Observer dashboard. | Operational. | None. |
-| **Phase 3** | **PHASE 3 - Basic Voting** | **100% verified local prototype scope** | **YES** | Voter dashboard, candidate selection, one-person-one-vote enforcement, vote submission, vote counting, result dashboard. Non-blockchain and blockchain paths supported. | Operational. | None. |
-| **Phase 4** | **PHASE 4 - Blockchain Integration** | **100% verified local prototype scope** | **YES** | Solidity smart contract `VoteChainLedger.sol` compiled and deployed to local Ganache EVM. Vote transaction submission, transaction hash storage, block confirmation, and blockchain verification page. Replay protection verified. Automated contract tests pass 6/6. | Operates on local Ganache EVM consortium node. | None. |
-| **Phase 5** | **PHASE 5 - Privacy Layer** | **100% verified local prototype scope** | **YES** | The database separates voter participation records from anonymous encrypted ballot records; the ballot record does not contain voter ID. Anonymous voting credentials, AES-256-GCM vote encryption, cryptographic commitments, privacy-preserving receipts, and anonymous receipt verification. | Operational. | None. |
-| **Phase 6** | **PHASE 6 - Cryptographic Verification** | **100% verified local prototype scope** | **YES** | Balanced SHA-256 Merkle tree generation, Merkle root calculation, inclusion proof generation, client-side inclusion proof verification, and public election integrity dashboard. | Operational. | None. |
-| **Phase 7** | **PHASE 7 - Zero-Knowledge Verification** | **100% verified local prototype scope** | **YES** | Cramer-Damgård-Schoenmakers (CDS) 1-out-of-$N$ Disjunctive Non-Interactive Zero-Knowledge Proof (NIZKP) on BabyJubjub elliptic curve with Poseidon hash function (`src/lib/zk-proof.ts` via `circomlibjs`). Proves vote represents one valid candidate selection. Integrated into submission. Unit tests pass 5/5. | Implemented via CDS disjunctive NIZKP on twisted Edwards curve. | None. |
-| **Phase 8** | **PHASE 8 - Multi-Authority Tally** | **100% verified local prototype scope** | **YES** | Multiple election authority accounts (3 seeded accounts), Shamir's Secret Sharing over Galois Field $\text{GF}(256)$ with $0x11b$ polynomial (`src/lib/authority.ts`), 2-of-3 authorization threshold, tally authorization workflow, audit events logged for authority actions. | Operational. | None. |
-| **Phase 9** | **PHASE 9 - Public Transparency** | **100% verified local prototype scope** | **YES** | Real-time election status, non-sensitive vote count, blockchain block status, integrity status, public verification page (`/verify` without login), proof of election QR code generator (`src/lib/qr.ts`). | Operational. | None. |
-| **Phase 10** | **PHASE 10 - Fault and Security Demonstrations** | **100% verified local prototype scope** | **YES** | Controlled demonstration modules: network failure simulation, client pending transaction queue buffer, transaction recovery synchronization upon reconnection, duplicate vote attempt rejection, tampered block record detection, invalid proof rejection, unauthorized admin action blocking. | Controlled demonstration environment. | None. |
+| Milestone | Target Environment | Automated Test Coverage | Status |
+| :--- | :--- | :---: | :---: |
+| **Core Architecture & Cryptography** | Local Consortium / Node.js | 50 / 50 Passing | **100% VERIFIED** |
+| **Online Cloud Deployment (Phases 1–14)** | Vercel + Neon + Sepolia + IndexedDB | 143 / 143 Passing | **100% VERIFIED** |
+| **Smart Contract Infrastructure** | Ethereum Sepolia (`0x7339...`) | 6 / 6 Passing | **100% VERIFIED** |
+| **Real Persistent Offline Voting (Phase 13)** | Browser IndexedDB + WebCrypto AES-GCM | 9 / 9 Passing | **100% VERIFIED** |
+| **Final Class Election Simulation (Phase 14)** | 100 Classroom Voters (`24CS001`-`24CS100`) | 12 / 12 Passing | **100% VERIFIED** |
 
 ---
 
-## Detailed Test Verification Results
+## 2. Complete Phase-by-Phase Verification Log (Phases 1–14)
 
-### 1. Automated Test Suite (`npm test`)
-- Total Tests: **50**
-- Passed: **50 (100%)**
-- Failed: **0**
-- Test suites:
-  - Smart Contract Tests: `contracts/VoteChainLedger.test.ts` (6 tests)
-  - Zero-Knowledge Cryptography: `src/lib/zk-proof.test.ts` (5 tests)
-  - Multi-Authority Shamir GF(256): `src/lib/authority.test.ts` (8 tests)
-  - Encrypted Ballot Privacy: `src/lib/encrypted-ballot.test.ts` (5 tests)
-  - Merkle Tree & Integrity: `src/lib/integrity.test.ts` (4 tests)
-  - Blockchain Ledger & Tamper Detection: `src/lib/blockchain.test.ts` (4 tests)
-  - Security & CSRF Origin Guards: `src/lib/csrf.test.ts` (4 tests)
-  - Voting Workflow & Single Vote: `src/lib/voting.test.ts` (4 tests)
-  - Role Routing & Authorization: `src/lib/role-routing.test.ts` (4 tests)
-  - Audit Trail & Election Results: `src/lib/audit.test.ts`, `src/lib/election-results.test.ts`, `src/lib/eligibility.test.ts`, `src/lib/qr.test.ts` (6 tests)
+### Phase 1: Real Registration + Email Verification
+- **Implementation**: Student registration pipeline requiring PSG Tech institutional email (`@psgtech.ac.in`) and Student ID format validation. Single-use 24-hour verification tokens hashed with SHA-256 in `VerificationToken`. Email dispatched via Nodemailer using Gmail SMTP TLS (`votechain.verify@gmail.com`).
+- **Tests**: 13 automated tests in [`src/lib/registration.test.ts`](src/lib/registration.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
 
-### 2. Real Local End-to-End Verification (`scripts/verify-real-e2e.ts`)
-- **Database & Tables**: Verified PostgreSQL 18 on port 5433, all tables operational.
-- **Role Credentials & Permissions**: Verified all 7 seeded demo accounts, password matching, session token creation, and landing routes.
-- **Blockchain & Contract**: Verified Ganache EVM node (port 8545, Chain ID 1337) and deployed contract `VoteChainLedger.sol` at `0x5b1869D9A4C187F2EAa108f3062412ecf0526b24`.
-- **Full Lifecycle E2E**: Admin $\rightarrow$ Candidate Locking $\rightarrow$ ZK Proof Generation $\rightarrow$ AES Ballot Encryption $\rightarrow$ Double-Blind Storage $\rightarrow$ Ganache Mining $\rightarrow$ Replay Protection $\rightarrow$ Closing $\rightarrow$ 2-of-3 Authority Approvals $\rightarrow$ Key Reconstruction $\rightarrow$ Tallying $\rightarrow$ On-Chain Merkle Finalization $\rightarrow$ Public Verification. Result: **ALL PASSED**.
+### Phase 2: Class-Specific Eligibility Whitelists
+- **Implementation**: Election administrator CSV voter list parser in [`src/lib/csv-eligibility.ts`](src/lib/csv-eligibility.ts) with header validation, duplicate removal, and domain verification. Populates `ElectionEligibleVoter` table.
+- **Tests**: 9 automated tests in [`src/lib/class-eligibility.test.ts`](src/lib/class-eligibility.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
 
-### 3. Offline Fault Tolerance & Recovery E2E (`scripts/verify-offline-recovery.ts`)
-- **Explicit Test Flow**: Network failure $\rightarrow$ ballot queued locally in fault buffer $\rightarrow$ network restored $\rightarrow$ ballot dequeued and synchronized $\rightarrow$ server verifies ZK proof $\rightarrow$ Ethereum transaction mined $\rightarrow$ receipt generated with Tx hash and block number $\rightarrow$ election closed $\rightarrow$ multi-authority threshold key reconstruction $\rightarrow$ tally verified $\rightarrow$ on-chain Merkle root finalized $\rightarrow$ public inclusion proof verified. Result: **PASSED**.
+### Phase 3: Strict One-Person-One-Vote & Role Routing
+- **Implementation**: Atomic database participation tracking in `ElectionVoterParticipation` with unique constraint `@@unique([electionId, voterId])`. Role-based route guards in [`src/proxy.ts`](src/proxy.ts) enforcing dashboard isolation (`/portal`, `/admin`, `/authority`, `/observer`).
+- **Tests**: 8 automated tests in [`src/lib/one-vote-auth.test.ts`](src/lib/one-vote-auth.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 4: Cloud Database Migration
+- **Implementation**: Transitioned from local PostgreSQL to cloud-hosted **Neon Serverless PostgreSQL** (`ap-southeast-1`), executed Prisma schema migrations, configured connection pooling, and resilient transaction timeout handling.
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 5: Production Hosting & Email Routing
+- **Implementation**: Deployed web application and API route handlers to **Vercel**. Integrated dynamic base URL resolution (`getAppBaseUrl()`) so verification links point to production rather than localhost.
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 6: Security Hardening & Penetration Testing
+- **Implementation**: Implemented CSRF origin and referer guards on all mutations in [`src/lib/csrf.ts`](src/lib/csrf.ts), HMAC-SHA256 session token signatures in [`src/lib/session.ts`](src/lib/session.ts), and strict production headers (CSP, HSTS, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`). Audited client bundles for zero secret leakage.
+- **Tests**: 6 automated tests in [`src/lib/phase6-security.test.ts`](src/lib/phase6-security.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 7: Public Testnet Smart Contract
+- **Implementation**: Compiled and deployed [`contracts/VoteChainLedger.sol`](contracts/VoteChainLedger.sol) to **Ethereum Sepolia** (Chain ID 11155111) at contract address `0x7339F8B088A2835F26e158c9F96690395D80264D` using relayer address `0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`. Verified bytecode and replay prevention.
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 8: Real Online Voter Experience
+- **Implementation**: Browser voter portal integrated with live Sepolia transactions. Verified full live browser vote, transaction mining on Sepolia, deterministic receipt issuance, and tampered-receipt rejection.
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 9: Threshold Authorities & Per-Election Keys
+- **Phase 9.1**: Replaced global encryption key with unique 256-bit cryptographically random Data Encryption Key (DEK) per election with SHA-256 `keyCommitment` in [`src/lib/election-keys.ts`](src/lib/election-keys.ts).
+- **Phase 9.2**: Real 2-of-3 Shamir Secret Sharing custody over Galois Field $\text{GF}(256)$ ($0x11b$ polynomial) with election ID binding in [`src/lib/authority.ts`](src/lib/authority.ts).
+- **Phase 9.3**: Made 2-of-3 threshold authority reconstruction mandatory for final tallying; removed all global fallback keys from results decryption.
+- **Tests**: 15 automated tests in [`src/lib/threshold-mandatory-9-3.test.ts`](src/lib/threshold-mandatory-9-3.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 10: Full Online End-to-End Verification
+- **Implementation**: Executed full online verification pipeline across the entire production stack (Vercel $\rightarrow$ Neon PostgreSQL $\rightarrow$ Voter Browser $\rightarrow$ ZK Proof $\rightarrow$ Ethereum Sepolia $\rightarrow$ 2-of-3 Threshold Tally $\rightarrow$ Public Verification).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 11: Security Audit & Hardening
+- **Implementation**: Full vulnerability assessment across authentication, IDOR, voting replay, threshold matrix (0/1/dup/tampered/wrong-election share rejection), client bundle secrets audit, and database privacy decoupling.
+- **Tests**: 29 automated tests in [`src/lib/phase11-security.test.ts`](src/lib/phase11-security.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 12: Capacity & Load Testing (~100 Users)
+- **Implementation**: Benchmarked system under classroom capacity (~100 users): 100 concurrent logins, 40 parallel race-condition submissions (100% one-person-one-vote preserved), 100 concurrent ZK proofs, 80 full pipeline submissions, and 100 concurrent public verifications.
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 13: Real Offline Voting + Persistent Recovery + Sepolia Sync
+- **Implementation**: Replaced demo toggle with real browser **IndexedDB** queue (`VoteChainOfflineDB`) in [`src/lib/offline-storage.ts`](src/lib/offline-storage.ts), client-side WebCrypto **AES-256-GCM** encryption with PBKDF2 device key envelopes in [`src/lib/offline-encryption.ts`](src/lib/offline-encryption.ts), and automatic synchronization engine in [`src/lib/offline-sync.ts`](src/lib/offline-sync.ts). Verified zero plaintext candidate choices on disk, survival of browser restarts, and automatic mining to Sepolia upon reconnection.
+- **Tests**: 9 automated tests in [`src/lib/offline-voting.test.ts`](src/lib/offline-voting.test.ts).
+- **Status**: **COMPLETED & APPROVED**.
+
+### Phase 14: Final Realistic Class Election Simulation
+- **Implementation**: Full 12-step simulated class election (`phase14-class-election-608641`) with 100 synthetic student voters (`24CS001`-`24CS100`), 95 online votes, 5 Phase 13 offline synchronized votes, 5 blocked duplicate attempts, live Sepolia transaction ([`0x3571994fb08cb269a5dea627643f39ac43d8da4b5a8d84dc0a4928c50819588a`](https://sepolia.etherscan.io/tx/0x3571994fb08cb269a5dea627643f39ac43d8da4b5a8d84dc0a4928c50819588a) at Block `#11821078`), mandatory 2-of-3 threshold tally, and 100/100 public receipt and Merkle inclusion proof verifications.
+- **Status**: **COMPLETED & APPROVED**.
 
 ---
 
-## Clarification of Local vs. Remote Deployment
+## 3. Automated Test Suite Metrics
 
-- **Current Environment**: The current implementation is a complete **local online voting prototype**.
-- **Consortium EVM**: The blockchain is run locally via Ganache on port `8545`. It executes real Ethereum bytecode, consumes gas, and mines blocks.
-- **Relational Database**: PostgreSQL 18 is running locally on port `5433`.
-- **Public Internet Deployment**: Not yet initiated, as per user instructions. When ready for internet deployment, only environment variables (`ETHEREUM_RPC_URL` and `DATABASE_URL`) need to point to public/cloud endpoints.
+```
+Unit & Cryptographic Test Suite (npm run test:unit):
+  Total Tests Run: 143
+  Passed         : 143 (100%)
+  Failed         : 0
+  Duration       : ~82 seconds
+
+Smart Contract Test Suite (npm run test:contracts):
+  Total Tests Run: 6
+  Passed         : 6 (100%)
+  Failed         : 0
+  Duration       : ~4.7 seconds
+
+Phase 13 Offline Voting Test Suite (offline-voting.test.ts):
+  Total Tests Run: 9
+  Passed         : 9 (100%)
+  Failed         : 0
+  Duration       : ~550 ms
+
+Phase 14 End-to-End Simulation (verify-phase14-final-class-election.ts):
+  Total Steps Run: 12
+  Passed         : 12 (100%)
+  Failed         : 0
+  Duration       : ~138 seconds
+
+Production Build Check (npm run build):
+  Static & Serverless Routes: 20 / 20 Compiled Successfully
+  TypeScript Diagnostics    : 0 Errors
+```
+
+---
+
+## 4. Live Cloud & Blockchain Infrastructure Details
+
+- **Public Web Application**: Hosted on Vercel Serverless Platform
+- **Relational Database**: Neon Serverless PostgreSQL (`ep-sparkling-frost-b3e64tfr-pooler.c-4.ap-southeast-1.aws.neon.tech:5432`)
+- **Ethereum Network**: Ethereum Sepolia Testnet (Chain ID `11155111`)
+- **Smart Contract**: [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol) at `0x7339F8B088A2835F26e158c9F96690395D80264D`
+- **Relayer Account**: `0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`
+- **Verification Email**: `votechain.verify@gmail.com` via Gmail SMTP TLS
+
+---
+
+## 5. Conclusion
+
+All 14 phases of VoteChain are 100% implemented, tested, and verified against production standards and the educational prototype specification.

@@ -34,12 +34,20 @@ async function cleanupTestUsers() {
   const emails = [TEST_EMAIL_1, TEST_EMAIL_2, "expired_test@psgtech.ac.in", "resend_test@psgtech.ac.in"];
   const ids = [TEST_STUDENT_ID_1, TEST_STUDENT_ID_2, "EXP01", "RESEND01"];
 
-  await prisma.verificationToken.deleteMany({
-    where: { user: { OR: [{ email: { in: emails } }, { voterId: { in: ids } }] } },
-  });
-  await prisma.user.deleteMany({
-    where: { OR: [{ email: { in: emails } }, { voterId: { in: ids } }] },
-  });
+  for (let i = 0; i < 5; i++) {
+    try {
+      await prisma.verificationToken.deleteMany({
+        where: { user: { OR: [{ email: { in: emails } }, { voterId: { in: ids } }] } },
+      });
+      await prisma.user.deleteMany({
+        where: { OR: [{ email: { in: emails } }, { voterId: { in: ids } }] },
+      });
+      return;
+    } catch (e) {
+      if (i === 4) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 before(async () => {
