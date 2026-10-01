@@ -5,6 +5,9 @@ export type VoteSubmissionInput = {
   candidateId: string;
   validCandidateIds: string[];
   hasExistingVote: boolean;
+  startTime?: Date;
+  endTime?: Date;
+  now?: Date;
 };
 
 export type VoteValidationResult =
@@ -26,6 +29,9 @@ export function validateVoteSubmission({
   candidateId,
   validCandidateIds,
   hasExistingVote,
+  startTime,
+  endTime,
+  now,
 }: VoteSubmissionInput): VoteValidationResult {
   if (!electionId || electionId.trim().length === 0) {
     return { ok: false, error: "Election is required." };
@@ -41,6 +47,13 @@ export function validateVoteSubmission({
 
   if (hasExistingVote) {
     return { ok: false, error: "This voter has already voted in this election." };
+  }
+
+  if (startTime && endTime) {
+    const currentTime = now ?? new Date();
+    if (currentTime < startTime || currentTime >= endTime) {
+      return { ok: false, error: "Voting is only allowed during the active election time window." };
+    }
   }
 
   return { ok: true };

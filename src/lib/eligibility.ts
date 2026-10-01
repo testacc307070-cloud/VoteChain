@@ -171,6 +171,10 @@ export async function importElectionEligibilityList(
     throw new Error("Election not found.");
   }
 
+  if (election.status === "CLOSED" || election.status === "RESULTS_PUBLISHED") {
+    throw new Error("Eligibility register cannot be modified after an election has closed.");
+  }
+
   // Deduplicate records by email
   const uniqueRecordsMap = new Map<string, EligibleVoterRecord>();
   let duplicatesIgnored = 0;
@@ -229,7 +233,7 @@ export async function importElectionEligibilityList(
         eventHash: createHash("sha256").update(`${electionId}:${uniqueRecords.length}:${Date.now()}`).digest("hex"),
       },
     });
-  });
+  }, { timeout: 15000, maxWait: 10000 });
 
   return { count: uniqueRecords.length, duplicatesIgnored };
 }

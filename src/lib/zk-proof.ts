@@ -137,9 +137,14 @@ export async function createZkVoteProof({
   c_vals[candidateIndex] = (ch - sumOthers + q) % q;
   s_vals[candidateIndex] = (w + c_vals[candidateIndex] * r) % q;
 
+  const candidateIdsHash = createHash("sha256")
+    .update(validCandidateIds.slice().sort().join("|"))
+    .digest("hex");
+
   const proofPayload = JSON.stringify({
     scheme: "babyjubjub-cds-1-of-n",
     electionId,
+    candidateIdsHash,
     commitment: [F.toString(C[0]), F.toString(C[1])],
     challenges: c_vals.map((v) => v.toString()),
     responses: s_vals.map((v) => v.toString()),
@@ -183,6 +188,7 @@ export async function verifyZkVoteProof({
     const parsed = JSON.parse(jsonStr) as {
       scheme: string;
       electionId: string;
+      candidateIdsHash?: string;
       commitment: [string, string];
       challenges: string[];
       responses: string[];
@@ -191,6 +197,13 @@ export async function verifyZkVoteProof({
     if (parsed.scheme !== "babyjubjub-cds-1-of-n") return false;
     if (parsed.electionId !== electionId) return false;
     if (parsed.challenges.length !== m || parsed.responses.length !== m) return false;
+
+    if (parsed.candidateIdsHash) {
+      const expectedHash = createHash("sha256")
+        .update(validCandidateIds.slice().sort().join("|"))
+        .digest("hex");
+      if (parsed.candidateIdsHash !== expectedHash) return false;
+    }
 
     const { babyJub, poseidon } = await getCrypto();
     const F = babyJub.F;

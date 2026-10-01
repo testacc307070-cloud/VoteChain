@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { UserRole, UserStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdminApi } from "@/lib/admin-api";
+import { isValidPsgEmail } from "@/lib/auth-validation";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,13 @@ export async function POST(request: Request) {
     const role = (Object.values(UserRole) as string[]).includes(rawRole)
       ? (rawRole as UserRole)
       : UserRole.VOTER;
+
+    if (role === UserRole.VOTER && !isValidPsgEmail(email) && !email.endsWith("@votechain.local")) {
+      return NextResponse.json(
+        { error: "Voter accounts must use an official @psgtech.ac.in email address." },
+        { status: 400 }
+      );
+    }
 
     const existingUser = await prisma.user.findFirst({
       where: {

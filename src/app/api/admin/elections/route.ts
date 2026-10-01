@@ -16,7 +16,14 @@ export async function GET() {
       orderBy: [{ updatedAt: "desc" }],
       include: { candidates: { orderBy: { sortOrder: "asc" } } },
     });
-    return NextResponse.json({ elections });
+    const sanitizedElections = elections.map((e) => {
+      const { encryptedMasterKey, ...safe } = e;
+      return {
+        ...safe,
+        hasMasterKey: Boolean(encryptedMasterKey),
+      };
+    });
+    return NextResponse.json({ elections: sanitizedElections });
   } catch {
     return NextResponse.json({ error: "Could not load elections." }, { status: 500 });
   }
@@ -58,7 +65,16 @@ export async function POST(request: Request) {
       },
       include: { candidates: { orderBy: { sortOrder: "asc" } } },
     });
-    return NextResponse.json({ election }, { status: 201 });
+    const { encryptedMasterKey: _, ...safeElection } = election;
+    return NextResponse.json(
+      {
+        election: {
+          ...safeElection,
+          hasMasterKey: Boolean(election.encryptedMasterKey),
+        },
+      },
+      { status: 201 }
+    );
   } catch {
     return NextResponse.json({ error: "Could not create the election." }, { status: 500 });
   }

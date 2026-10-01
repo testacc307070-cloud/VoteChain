@@ -51,10 +51,25 @@ export async function POST(
 
   const { electionId } = await context.params;
 
-  let csvContent = "";
-  const contentType = request.headers.get("content-type") || "";
-
   try {
+    const election = await prisma.election.findUnique({
+      where: { id: electionId },
+      select: { id: true, status: true },
+    });
+
+    if (!election) {
+      return NextResponse.json({ error: "Election not found." }, { status: 404 });
+    }
+
+    if (election.status === "CLOSED" || election.status === "RESULTS_PUBLISHED") {
+      return NextResponse.json(
+        { error: "Eligibility register cannot be modified after an election has closed." },
+        { status: 409 }
+      );
+    }
+
+    let csvContent = "";
+    const contentType = request.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("file");

@@ -42,7 +42,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     candidateId = typeof formData.get("candidateId") === "string" ? String(formData.get("candidateId")) : undefined;
   }
 
-  if (!candidateId || typeof candidateId !== "string") {
+  if (!candidateId || typeof candidateId !== "string" || candidateId.length > 128) {
     return NextResponse.json({ error: "Choose a valid candidate before submitting your vote." }, { status: 400 });
   }
 
@@ -58,6 +58,14 @@ export async function POST(request: Request, context: { params: Promise<{ electi
   if (!election) return NextResponse.json({ error: "Election not found." }, { status: 404 });
   if (election.status !== "ACTIVE") {
     return NextResponse.json({ error: "Voting is only available while an election is active." }, { status: 409 });
+  }
+
+  const now = new Date();
+  if (now < election.startTime || now >= election.endTime) {
+    return NextResponse.json(
+      { error: "Voting is only allowed during the active election time window." },
+      { status: 409 }
+    );
   }
 
   const eligibility = await checkVoterElectionEligibility({
@@ -78,6 +86,9 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     candidateId,
     validCandidateIds: election.candidates.map((candidate) => candidate.id),
     hasExistingVote: election.participations.length > 0 || election.votes.length > 0,
+    startTime: election.startTime,
+    endTime: election.endTime,
+    now,
   });
 
   if (!validation.ok) return NextResponse.json({ error: validation.error }, { status: 400 });

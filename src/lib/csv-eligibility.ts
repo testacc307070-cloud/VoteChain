@@ -6,6 +6,8 @@ import {
   ALLOWED_EMAIL_DOMAIN,
 } from "@/lib/auth-validation";
 
+export const MAX_ELIGIBLE_VOTERS_CSV_ROWS = 5000;
+
 export interface EligibleVoterRecord {
   studentId: string;
   email: string;
@@ -88,6 +90,14 @@ export function parseEligibilityCsv(csvContent: string): ParseCsvResult {
       ok: false,
       error: "CSV contains headers but no student records.",
       errors: ["No student rows present below header."],
+    };
+  }
+
+  if (rawLines.length - 1 > MAX_ELIGIBLE_VOTERS_CSV_ROWS) {
+    return {
+      ok: false,
+      error: `CSV exceeds maximum allowed limit of ${MAX_ELIGIBLE_VOTERS_CSV_ROWS} voter records (found ${rawLines.length - 1} rows).`,
+      errors: [`Exceeded maximum limit of ${MAX_ELIGIBLE_VOTERS_CSV_ROWS} rows.`],
     };
   }
 
