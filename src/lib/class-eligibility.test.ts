@@ -12,12 +12,20 @@ const TEST_ELECTION_1_ID = "test_eligibility_elec_1";
 const TEST_ELECTION_2_ID = "test_eligibility_elec_2";
 
 async function cleanupEligibilityTest() {
-  await prisma.electionEligibleVoter.deleteMany({
-    where: { electionId: { in: [TEST_ELECTION_1_ID, TEST_ELECTION_2_ID] } },
-  });
-  await prisma.election.deleteMany({
-    where: { id: { in: [TEST_ELECTION_1_ID, TEST_ELECTION_2_ID] } },
-  });
+  for (let i = 0; i < 5; i++) {
+    try {
+      await prisma.electionEligibleVoter.deleteMany({
+        where: { electionId: { in: [TEST_ELECTION_1_ID, TEST_ELECTION_2_ID] } },
+      });
+      await prisma.election.deleteMany({
+        where: { id: { in: [TEST_ELECTION_1_ID, TEST_ELECTION_2_ID] } },
+      });
+      return;
+    } catch (e) {
+      if (i === 4) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 before(async () => {

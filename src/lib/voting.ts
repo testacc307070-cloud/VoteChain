@@ -92,11 +92,12 @@ export function verifyVoteReceipt({
 }: {
   electionId: string;
   voteId: string;
-  submittedAt: Date;
+  submittedAt: Date | string;
   recordHash: string;
 }) {
+  const dateObj = typeof submittedAt === "string" ? new Date(submittedAt) : submittedAt;
   const expectedHash = createHash("sha256")
-    .update(`${electionId}:${voteId}:${submittedAt.toISOString()}`)
+    .update(`${electionId}:${voteId}:${dateObj.toISOString()}`)
     .digest("hex");
 
   return expectedHash === recordHash;

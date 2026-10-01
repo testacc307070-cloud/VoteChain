@@ -16,18 +16,26 @@ const TEST_ELEC_1_ID = "test_onevote_elec_1";
 const TEST_ELEC_2_ID = "test_onevote_elec_2";
 
 async function cleanupOneVoteTest() {
-  await prisma.electionVoterParticipation.deleteMany({
-    where: { electionId: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
-  });
-  await prisma.electionEligibleVoter.deleteMany({
-    where: { electionId: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
-  });
-  await prisma.election.deleteMany({
-    where: { id: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
-  });
-  await prisma.user.deleteMany({
-    where: { email: { in: [TEST_VOTER_A_EMAIL, TEST_VOTER_UNVERIFIED_EMAIL] } },
-  });
+  for (let i = 0; i < 5; i++) {
+    try {
+      await prisma.electionVoterParticipation.deleteMany({
+        where: { electionId: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
+      });
+      await prisma.electionEligibleVoter.deleteMany({
+        where: { electionId: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
+      });
+      await prisma.election.deleteMany({
+        where: { id: { in: [TEST_ELEC_1_ID, TEST_ELEC_2_ID] } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { in: [TEST_VOTER_A_EMAIL, TEST_VOTER_UNVERIFIED_EMAIL] } },
+      });
+      return;
+    } catch (e) {
+      if (i === 4) throw e;
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
 }
 
 before(async () => {
