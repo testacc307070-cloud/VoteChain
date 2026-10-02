@@ -248,7 +248,7 @@ export async function importElectionEligibilityList(
         eventHash: createHash("sha256").update(`${electionId}:${uniqueRecords.length}:${Date.now()}`).digest("hex"),
       },
     });
-  }, { timeout: 15000, maxWait: 10000 });
+  }, { timeout: 45000, maxWait: 20000 });
 
   return { count: uniqueRecords.length, duplicatesIgnored };
 }

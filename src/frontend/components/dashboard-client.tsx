@@ -14,6 +14,8 @@ import {
   CircleAlert,
   CircleHelp,
   ClipboardList,
+  Copy,
+  Eye,
   Fingerprint,
   KeyRound,
   LayoutDashboard,
@@ -146,6 +148,29 @@ export default function DashboardClient({
   const [globalMessage, setGlobalMessage] = useState("");
   const [globalError, setGlobalError] = useState("");
 
+  // Observer Access Code state
+  const [observerModalElection, setObserverModalElection] = useState<{ id: string; name: string } | null>(null);
+  const [observerCodeResult, setObserverCodeResult] = useState<string>("");
+  const [observerCodeLoading, setObserverCodeLoading] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  async function handleGenerateObserverCode(electionId: string, electionName: string) {
+    setObserverModalElection({ id: electionId, name: electionName });
+    setObserverCodeResult("");
+    setCopiedCode(false);
+    setObserverCodeLoading(true);
+    try {
+      const res = await fetch(`/api/elections/${electionId}/observer-code`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to generate observer code.");
+      setObserverCodeResult(data.accessCode);
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "Failed to generate observer code.");
+    } finally {
+      setObserverCodeLoading(false);
+    }
+  }
+
   const initials = displayName
     .split(/\s+/)
     .map((part) => part[0])
@@ -238,22 +263,36 @@ export default function DashboardClient({
         body: JSON.stringify({
           name: form.get("name"),
           email: form.get("email"),
-          password: form.get("password"),
+          invite: true,
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to create authority.");
+      if (!res.ok) throw new Error(data.error ?? "Failed to invite authority.");
 
       setAuthoritySuccess(
-        `Authority Trustee #${data.authority.authorityIndex} (${data.authority.name}) created successfully!`
+        `Authority Trustee (${data.authority.name}) invited successfully! An invitation email has been sent.`
       );
       await reloadAuthorities();
       e.currentTarget.reset();
-      setTimeout(() => setShowAuthorityModal(false), 1500);
+      setTimeout(() => setShowAuthorityModal(false), 2000);
     } catch (err) {
-      setAuthorityError(err instanceof Error ? err.message : "Error creating authority.");
+      setAuthorityError(err instanceof Error ? err.message : "Error inviting authority.");
     } finally {
       setAuthoritySubmitting(false);
+    }
+  }
+
+  async function handleResendInvitation(authorityId: string, email: string) {
+    setGlobalError("");
+    setGlobalMessage("");
+    try {
+      const res = await fetch(`/api/admin/authorities/${authorityId}/resend`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to resend invitation.");
+      setGlobalMessage(data.message || `Invitation successfully resent to ${email}.`);
+      await reloadAuthorities();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "Error resending invitation.");
     }
   }
 
@@ -473,13 +512,13 @@ export default function DashboardClient({
                 </div>
               </div>
 
-              {/* Add Authority Form Panel */}
-              {showAuthorityModal && authorities.length < 3 && (
+              {/* Invite Authority Form Panel */}
+              {showAuthorityModal && (
                 <div className="election-create-panel" style={{ marginTop: "1rem" }}>
                   <div className="form-section-heading">
                     <div>
-                      <span className="panel-kicker">TRUSTEE ENROLLMENT · SLOT #{authorities.length + 1}</span>
-                      <h2>Add Election Authority Account</h2>
+                      <span className="panel-kicker">TRUSTEE INVITATION · GLOBAL AUTHORITY POOL</span>
+                      <h2>Invite Election Authority Trustee</h2>
                     </div>
                   </div>
                   {authorityError && <div className="election-feedback feedback-error">{authorityError}</div>}
@@ -492,44 +531,40 @@ export default function DashboardClient({
                       </label>
                       <label className="field-block">
                         <span>Email Address</span>
-                        <input name="email" type="email" required placeholder="e.g. trustee@votechain.local" />
+                        <input name="email" type="email" required placeholder="e.g. eleanor.vance@gmail.com" />
                       </label>
                     </div>
-                    <label className="field-block">
-                      <span>Temporary Password (min 8 chars)</span>
-                      <input name="password" type="password" required minLength={8} placeholder="••••••••••••" />
-                    </label>
                     <div className="election-form-footer">
-                      <span>Authority accounts will be pre-verified and assigned to Slot #{authorities.length + 1}.</span>
+                      <span>An official invitation email will be dispatched with a 48-hour secure token link for trustee password setup.</span>
                       <button className="primary-button" type="submit" disabled={authoritySubmitting}>
-                        {authoritySubmitting ? "Creating Trustee..." : "Create Authority Account"}
+                        {authoritySubmitting ? "Sending Invitation..." : "Send Trustee Invitation"}
                       </button>
                     </div>
                   </form>
                 </div>
               )}
 
-              {/* 3 Authority Slots Display */}
+              {/* Global Authority Pool Display */}
               <div style={{ marginTop: "1.5rem" }}>
                 <div className="election-list-heading">
                   <div>
-                    <h2>Designated Authority Slots (2-of-3 Custody)</h2>
-                    <p>Each slot holds 1 Shamir secret share for modern election tally decryption.</p>
+                    <h2>Global Authority Pool (2-of-3 Threshold Trustees)</h2>
+                    <p>Active trustees can be assigned to Slots 1, 2, and 3 for any election. Key reconstruction requires any 2 distinct assigned trustees.</p>
                   </div>
-                  <span className="election-total">{authorities.length} / 3 ASSIGNED</span>
+                  <span className="election-total">{authorities.length} REGISTERED TRUSTEES</span>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "1rem", marginTop: "1rem" }}>
-                  {[1, 2, 3].map((slotIndex) => {
-                    const auth = authorities[slotIndex - 1];
+                  {authorities.map((auth, index) => {
+                    const isInvited = auth.status === "INVITED";
                     return (
                       <div
-                        key={slotIndex}
+                        key={auth.id}
                         style={{
                           border: "1px solid var(--line, #2d3748)",
                           borderRadius: "8px",
                           padding: "1.25rem",
-                          background: auth ? "var(--paper, #1a202c)" : "rgba(255, 255, 255, 0.02)",
+                          background: "var(--paper, #1a202c)",
                           display: "flex",
                           flexDirection: "column",
                           justifyContent: "space-between",
@@ -544,58 +579,63 @@ export default function DashboardClient({
                                 fontWeight: 700,
                                 padding: "0.2rem 0.5rem",
                                 borderRadius: "4px",
-                                background: auth ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.08)",
-                                color: auth ? "#10b981" : "var(--muted, #888)",
+                                background: isInvited ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                                color: isInvited ? "#fbbf24" : "#10b981",
                               }}
                             >
-                              SLOT {slotIndex}: AUTHORITY {slotIndex}
+                              TRUSTEE #{index + 1}
                             </span>
                             <span
-                              className={`election-status ${auth ? "status-active" : "status-draft"}`}
+                              className={`election-status ${isInvited ? "status-draft" : "status-active"}`}
                               style={{ fontSize: "0.7rem", padding: "0.15rem 0.45rem" }}
                             >
-                              <i /> {auth ? auth.status : "VACANT"}
+                              <i /> {isInvited ? "PENDING ACTIVATION" : "ACTIVE"}
                             </span>
                           </div>
 
-                          {auth ? (
-                            <div>
-                              <strong style={{ fontSize: "1rem", display: "block" }}>{auth.name}</strong>
-                              <span style={{ fontSize: "0.8rem", color: "var(--muted, #888)", display: "block", marginTop: "0.2rem" }}>
-                                {auth.email}
-                              </span>
-                              <div style={{ fontSize: "0.75rem", color: "var(--muted, #888)", marginTop: "0.5rem" }}>
-                                Enrolled: {new Date(auth.createdAt).toLocaleDateString()} · Role: <strong>{auth.role}</strong>
-                              </div>
+                          <div>
+                            <strong style={{ fontSize: "1rem", display: "block" }}>{auth.name}</strong>
+                            <span style={{ fontSize: "0.8rem", color: "var(--muted, #888)", display: "block", marginTop: "0.2rem" }}>
+                              {auth.email}
+                            </span>
+                            <div style={{ fontSize: "0.75rem", color: "var(--muted, #888)", marginTop: "0.5rem" }}>
+                              Enrolled: {new Date(auth.createdAt).toLocaleDateString()} · Role: <strong>{auth.role}</strong>
                             </div>
-                          ) : (
-                            <div style={{ color: "var(--muted, #888)", fontSize: "0.85rem", padding: "0.5rem 0" }}>
-                              Unassigned Trustee Position.
-                              <div style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}>
-                                Click &quot;Add Authority Trustee&quot; above to fill this slot.
-                              </div>
-                            </div>
-                          )}
+                          </div>
                         </div>
 
-                        {auth && (
-                          <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: "0.7rem", color: "#10b981", display: "flex", alignItems: "center", gap: "0.25rem" }}>
-                              <ShieldCheck size={12} /> Key Share Holder
-                            </span>
+                        <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          {isInvited ? (
                             <button
                               type="button"
                               className="secondary-button"
-                              style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem", borderColor: "#ef4444", color: "#dc2626" }}
-                              onClick={() => handleRemoveAuthority(auth.id, auth.name)}
+                              style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem", borderColor: "#f59e0b", color: "#fbbf24" }}
+                              onClick={() => handleResendInvitation(auth.id, auth.email)}
                             >
-                              <Trash2 size={12} /> Remove
+                              Resend Invite
                             </button>
-                          </div>
-                        )}
+                          ) : (
+                            <span style={{ fontSize: "0.7rem", color: "#10b981", display: "flex", alignItems: "center", gap: "0.25rem" }}>
+                              <ShieldCheck size={12} /> Key Share Holder
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ fontSize: "0.75rem", padding: "0.2rem 0.5rem", borderColor: "#ef4444", color: "#dc2626" }}
+                            onClick={() => handleRemoveAuthority(auth.id, auth.name)}
+                          >
+                            <Trash2 size={12} /> Remove
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
+                  {authorities.length === 0 && (
+                    <div style={{ padding: "2rem", textAlign: "center", color: "#94a3b8", gridColumn: "1 / -1" }}>
+                      No authority trustees registered. Click &quot;Add Authority Trustee&quot; above to send an invitation.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -850,6 +890,15 @@ export default function DashboardClient({
                               <ShieldAlert size={12} /> Protected ({el.votesCount} votes)
                             </span>
                           )}
+
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            style={{ borderColor: "#38bdf8", color: "#38bdf8", display: "inline-flex", alignItems: "center", gap: "0.3rem", fontSize: "0.75rem" }}
+                            onClick={() => handleGenerateObserverCode(el.id, el.name)}
+                          >
+                            <Eye size={12} /> Observer Code
+                          </button>
 
                           <button
                             type="button"
@@ -1113,6 +1162,111 @@ export default function DashboardClient({
                 onClick={() => void executeDeleteElection()}
               >
                 {actionInProgress ? "Deleting..." : "Permanently Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Observer Access Code Modal */}
+      {observerModalElection && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--paper, #111827)",
+              border: "1px solid #38bdf8",
+              borderRadius: "8px",
+              maxWidth: "480px",
+              width: "100%",
+              padding: "1.5rem",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.5)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#38bdf8" }}>
+              <Eye size={22} />
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Election Observer Access Code</h3>
+            </div>
+            <p style={{ margin: "1rem 0 0.5rem", fontSize: "0.875rem", lineHeight: 1.5 }}>
+              Election: <strong>{observerModalElection.name}</strong>
+            </p>
+
+            {observerCodeLoading ? (
+              <div style={{ padding: "1.5rem", textAlign: "center", color: "#94a3b8" }}>
+                Generating cryptographic access code...
+              </div>
+            ) : observerCodeResult ? (
+              <div>
+                <p style={{ fontSize: "0.8rem", color: "var(--muted, #888)", margin: "0.5rem 0" }}>
+                  Provide this access code to independent auditors or observers. It grants read-only verification access strictly to this election at <code>/observe</code>.
+                </p>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "#090d16",
+                    border: "1px solid #1e293b",
+                    borderRadius: "6px",
+                    padding: "0.75rem 1rem",
+                    margin: "1rem 0",
+                  }}
+                >
+                  <code style={{ fontSize: "1.1rem", fontWeight: 700, color: "#38bdf8", letterSpacing: "0.05em" }}>
+                    {observerCodeResult}
+                  </code>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ fontSize: "0.75rem", padding: "0.25rem 0.6rem", display: "flex", alignItems: "center", gap: "0.3rem" }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(observerCodeResult);
+                      setCopiedCode(true);
+                      setTimeout(() => setCopiedCode(false), 2000);
+                    }}
+                  >
+                    <Copy size={12} /> {copiedCode ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+                <div
+                  style={{
+                    background: "rgba(56, 189, 248, 0.1)",
+                    border: "1px solid rgba(56, 189, 248, 0.2)",
+                    borderRadius: "6px",
+                    padding: "0.6rem 0.8rem",
+                    fontSize: "0.75rem",
+                    color: "#94a3b8",
+                  }}
+                >
+                  Security note: The plaintext code is displayed once. Only its SHA-256 hash is stored in the database. Generating a new code immediately invalidates prior codes.
+                </div>
+              </div>
+            ) : null}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.25rem" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => {
+                  setObserverModalElection(null);
+                  setObserverCodeResult("");
+                }}
+              >
+                Close
               </button>
             </div>
           </div>

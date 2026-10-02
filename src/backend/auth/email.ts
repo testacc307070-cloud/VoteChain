@@ -1,12 +1,30 @@
 import nodemailer, { type Transporter } from "nodemailer";
+import { sanitizeTokenUrl } from "./token-utils";
 
 export const VOTECHAIN_SENDER_EMAIL = "votechain.verify@gmail.com";
 export const VOTECHAIN_SENDER = `"VoteChain Verification" <${VOTECHAIN_SENDER_EMAIL}>`;
+
+export const ADMIN_SENDER_EMAIL = "admin.votechain@gmail.com";
+export const ADMIN_SENDER = `"VoteChain Administration" <${ADMIN_SENDER_EMAIL}>`;
 
 export interface SendVerificationEmailParams {
   to: string;
   name: string;
   studentId: string;
+  token: string;
+  baseUrl?: string;
+}
+
+export interface SendAuthorityInvitationParams {
+  to: string;
+  name: string;
+  token: string;
+  baseUrl?: string;
+}
+
+export interface SendPasswordResetParams {
+  to: string;
+  name?: string;
   token: string;
   baseUrl?: string;
 }
@@ -63,7 +81,10 @@ export function getAppBaseUrl(explicitBaseUrl?: string): string {
   return "http://localhost:3000";
 }
 
-function getTransporter(): Transporter | null {
+/**
+ * Returns the voter transactional email transporter (votechain.verify@gmail.com).
+ */
+export function getVoterTransporter(): Transporter | null {
   if (transportOverride) return transportOverride;
 
   const user = (process.env.EMAIL_USER || process.env.test_mail || VOTECHAIN_SENDER_EMAIL).trim();
@@ -80,6 +101,37 @@ function getTransporter(): Transporter | null {
       pass,
     },
   });
+}
+
+/**
+ * Returns the admin transactional email transporter (admin.votechain@gmail.com).
+ * Falls back gracefully to the voter transporter if admin credentials are not specifically set.
+ */
+export function getAdminTransporter(): Transporter | null {
+  if (transportOverride) return transportOverride;
+
+  const adminPass = (process.env.ADMIN_EMAIL_APP_PASSWORD || "").trim();
+  const adminUser = (process.env.ADMIN_EMAIL_USER || ADMIN_SENDER_EMAIL).trim();
+
+  if (adminPass) {
+    return nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: adminUser,
+        pass: adminPass,
+      },
+    });
+  }
+
+  // Graceful fallback to voter transporter for local development / unified SMTP
+  return getVoterTransporter();
+}
+
+/**
+ * Legacy alias for getVoterTransporter
+ */
+export function getTransporter(): Transporter | null {
+  return getVoterTransporter();
 }
 
 export function generateVerificationEmailHtml(name: string, studentId: string, verifyUrl: string): string {
@@ -153,7 +205,7 @@ export function generateVerificationEmailHtml(name: string, studentId: string, v
           <tr>
             <td style="padding: 20px 32px; background-color: #0d131f; border-top: 1px solid #1f2937; text-align: center;">
               <p style="font-size: 11px; color: #475569; margin: 0;">
-                Sent by VoteChain Election Authority &bull; Official Campus Voting Prototype<br/>
+                Sent by VoteChain Election Authority &bull; Official Campus Voting Network<br/>
                 Sender: <a href="mailto:${VOTECHAIN_SENDER_EMAIL}" style="color: #64748b; text-decoration: none;">${VOTECHAIN_SENDER_EMAIL}</a>
               </p>
             </td>
@@ -186,6 +238,200 @@ Sender: ${VOTECHAIN_SENDER_EMAIL}
 `;
 }
 
+export function generateAuthorityInvitationEmailHtml(name: string, setupUrl: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoteChain — Election Authority Trustee Invitation</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0b0f19; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px; border-bottom: 1px solid #1f2937; background: linear-gradient(180deg, #161f33 0%, #111827 100%);">
+              <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: #ffffff;">votechain<span style="color: #6366f1;">.</span></span>
+              <span style="display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #818cf8; margin-top: 4px;">Cryptographic Election Authority</span>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <h1 style="font-size: 22px; font-weight: 700; color: #ffffff; margin: 0 0 16px;">Election Authority Trustee Invitation</h1>
+              <p style="font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px;">
+                Dear <strong>${name}</strong>,
+              </p>
+              <p style="font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px;">
+                You have been officially invited by the VoteChain Administrator to serve as an <strong>Election Authority Trustee</strong>. In this role, you hold custodial shares of election encryption keys under our 2-of-3 threshold cryptography system, ensuring that election results cannot be decrypted or tampered with without trustee consensus.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="${setupUrl}" target="_blank" style="display: inline-block; background-color: #6366f1; color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);">
+                      Activate Trustee Account &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size: 12px; color: #64748b; line-height: 1.6; margin: 0 0 12px;">
+                Or open this link directly in your browser:
+              </p>
+              <p style="font-size: 11px; color: #818cf8; word-break: break-all; margin: 0 0 24px; padding: 10px; background-color: #0f172a; border-radius: 6px; border: 1px solid #1e293b;">
+                <a href="${setupUrl}" style="color: #818cf8; text-decoration: underline;">${setupUrl}</a>
+              </p>
+
+              <div style="border-top: 1px solid #1f2937; padding-top: 20px;">
+                <p style="font-size: 12px; color: #94a3b8; margin: 0 0 6px;">
+                  &#9201; This invitation is valid for <strong>48 hours</strong> and can only be used once.
+                </p>
+                <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                  &#128274; You will create your own secure password upon activation. The administrator never has access to your password or secret key shares.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0d131f; border-top: 1px solid #1f2937; text-align: center;">
+              <p style="font-size: 11px; color: #475569; margin: 0;">
+                Sent by VoteChain Administration &bull; Secure Cryptographic Key Custody<br/>
+                Sender: <a href="mailto:${ADMIN_SENDER_EMAIL}" style="color: #64748b; text-decoration: none;">${ADMIN_SENDER_EMAIL}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export function generateAuthorityInvitationEmailText(name: string, setupUrl: string): string {
+  return `VoteChain — Election Authority Trustee Invitation
+
+Dear ${name},
+
+You have been invited by the VoteChain Administrator to serve as an Election Authority Trustee.
+
+Please activate your trustee account and set your secure password:
+${setupUrl}
+
+This invitation link will expire in 48 hours and can only be used once.
+
+---
+VoteChain Administration
+Sender: ${ADMIN_SENDER_EMAIL}
+`;
+}
+
+export function generatePasswordResetEmailHtml(name: string, resetUrl: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VoteChain — Reset your password</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #0b0f19; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 560px; background-color: #111827; border: 1px solid #1f2937; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 32px 32px 24px; border-bottom: 1px solid #1f2937; background: linear-gradient(180deg, #161f33 0%, #111827 100%);">
+              <span style="font-size: 20px; font-weight: 800; letter-spacing: -0.03em; color: #ffffff;">votechain<span style="color: #3b82f6;">.</span></span>
+              <span style="display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; margin-top: 4px;">Account Security</span>
+            </td>
+          </tr>
+
+          <!-- Main Content -->
+          <tr>
+            <td style="padding: 32px;">
+              <h1 style="font-size: 22px; font-weight: 700; color: #ffffff; margin: 0 0 16px;">Reset Your Password</h1>
+              <p style="font-size: 15px; color: #cbd5e1; line-height: 1.6; margin: 0 0 20px;">
+                Hello <strong>${name}</strong>,
+              </p>
+              <p style="font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 28px;">
+                We received a request to reset your password for your VoteChain account. Click the button below to choose a new password.
+              </p>
+
+              <!-- CTA Button -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 0 0 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="${resetUrl}" target="_blank" style="display: inline-block; background-color: #3b82f6; color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);">
+                      Reset Password &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size: 12px; color: #64748b; line-height: 1.6; margin: 0 0 12px;">
+                Button not working? Copy and paste the link below into your browser:
+              </p>
+              <p style="font-size: 11px; color: #60a5fa; word-break: break-all; margin: 0 0 24px; padding: 10px; background-color: #0f172a; border-radius: 6px; border: 1px solid #1e293b;">
+                <a href="${resetUrl}" style="color: #60a5fa; text-decoration: underline;">${resetUrl}</a>
+              </p>
+
+              <div style="border-top: 1px solid #1f2937; padding-top: 20px;">
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 6px;">
+                  &#9201; This link is valid for <strong>1 hour</strong> and can only be used once.
+                </p>
+                <p style="font-size: 12px; color: #64748b; margin: 0;">
+                  &#128274; If you did not request a password reset, you can safely ignore this email.
+                </p>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 32px; background-color: #0d131f; border-top: 1px solid #1f2937; text-align: center;">
+              <p style="font-size: 11px; color: #475569; margin: 0;">
+                Sent by VoteChain Security &bull; Official Campus Voting Network<br/>
+                Sender: <a href="mailto:${VOTECHAIN_SENDER_EMAIL}" style="color: #64748b; text-decoration: none;">${VOTECHAIN_SENDER_EMAIL}</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+export function generatePasswordResetEmailText(name: string, resetUrl: string): string {
+  return `VoteChain — Reset your password
+
+Hello ${name},
+
+We received a request to reset your password for your VoteChain account.
+
+Click the link below to choose a new password:
+${resetUrl}
+
+This link is valid for 1 hour and can only be used once.
+
+If you did not request a password reset, you can safely ignore this email.
+
+---
+VoteChain Security
+Sender: ${VOTECHAIN_SENDER_EMAIL}
+`;
+}
+
 export async function sendVerificationEmail(params: SendVerificationEmailParams): Promise<{
   success: boolean;
   verifyUrl: string;
@@ -200,7 +446,6 @@ export async function sendVerificationEmail(params: SendVerificationEmailParams)
   const html = generateVerificationEmailHtml(name, studentId, verifyUrl);
   const text = generateVerificationEmailText(name, studentId, verifyUrl);
 
-  // Record into history
   sentEmailHistory.push({
     to,
     subject,
@@ -209,10 +454,10 @@ export async function sendVerificationEmail(params: SendVerificationEmailParams)
     sentAt: new Date(),
   });
 
-  const transporter = getTransporter();
+  const transporter = getVoterTransporter();
 
   if (!transporter) {
-    console.warn(`[VoteChain Email] No SMTP credentials configured. Recorded email for ${to}: ${verifyUrl}`);
+    console.warn(`[VoteChain Email] No SMTP credentials configured. Recorded email for ${to}: ${sanitizeTokenUrl(verifyUrl)}`);
     return {
       success: true,
       verifyUrl,
@@ -241,6 +486,124 @@ export async function sendVerificationEmail(params: SendVerificationEmailParams)
     return {
       success: false,
       verifyUrl,
+      error: message,
+    };
+  }
+}
+
+export async function sendAuthorityInvitationEmail(params: SendAuthorityInvitationParams): Promise<{
+  success: boolean;
+  setupUrl: string;
+  messageId?: string;
+  error?: string;
+}> {
+  const { to, name, token, baseUrl: explicitBaseUrl } = params;
+  const baseUrl = getAppBaseUrl(explicitBaseUrl);
+  const setupUrl = `${baseUrl}/authority/setup?token=${encodeURIComponent(token)}`;
+
+  const subject = "VoteChain — Invitation to serve as Election Authority Trustee";
+  const html = generateAuthorityInvitationEmailHtml(name, setupUrl);
+  const text = generateAuthorityInvitationEmailText(name, setupUrl);
+
+  sentEmailHistory.push({
+    to,
+    subject,
+    verifyUrl: setupUrl,
+    token,
+    sentAt: new Date(),
+  });
+
+  const transporter = getAdminTransporter();
+
+  if (!transporter) {
+    console.warn(`[VoteChain Admin Email] No SMTP credentials configured. Recorded invitation for ${to}: ${sanitizeTokenUrl(setupUrl)}`);
+    return {
+      success: true,
+      setupUrl,
+      messageId: `simulated-${Date.now()}`,
+    };
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: ADMIN_SENDER,
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    console.info(`[VoteChain Admin Email] Sent authority invitation to ${to} (MessageId: ${info.messageId})`);
+    return {
+      success: true,
+      setupUrl,
+      messageId: info.messageId,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "SMTP send failure";
+    console.error(`[VoteChain Admin Email] Failed to send invitation to ${to}:`, message);
+    return {
+      success: false,
+      setupUrl,
+      error: message,
+    };
+  }
+}
+
+export async function sendPasswordResetEmail(params: SendPasswordResetParams): Promise<{
+  success: boolean;
+  resetUrl: string;
+  messageId?: string;
+  error?: string;
+}> {
+  const { to, name, token, baseUrl: explicitBaseUrl } = params;
+  const baseUrl = getAppBaseUrl(explicitBaseUrl);
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
+
+  const subject = "VoteChain — Reset your password";
+  const html = generatePasswordResetEmailHtml(name || "Voter", resetUrl);
+  const text = generatePasswordResetEmailText(name || "Voter", resetUrl);
+
+  sentEmailHistory.push({
+    to,
+    subject,
+    verifyUrl: resetUrl,
+    token,
+    sentAt: new Date(),
+  });
+
+  const transporter = getVoterTransporter();
+
+  if (!transporter) {
+    console.warn(`[VoteChain Email] No SMTP credentials configured. Recorded password reset for ${to}: ${sanitizeTokenUrl(resetUrl)}`);
+    return {
+      success: true,
+      resetUrl,
+      messageId: `simulated-${Date.now()}`,
+    };
+  }
+
+  try {
+    const info = await transporter.sendMail({
+      from: VOTECHAIN_SENDER,
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    console.info(`[VoteChain Email] Sent password reset email to ${to} (MessageId: ${info.messageId})`);
+    return {
+      success: true,
+      resetUrl,
+      messageId: info.messageId,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "SMTP send failure";
+    console.error(`[VoteChain Email] Failed to send password reset email to ${to}:`, message);
+    return {
+      success: false,
+      resetUrl,
       error: message,
     };
   }

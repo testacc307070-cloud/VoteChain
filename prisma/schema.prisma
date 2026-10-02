@@ -17,6 +17,13 @@ enum UserRole {
 enum UserStatus {
   ACTIVE
   SUSPENDED
+  INVITED
+}
+
+enum TokenType {
+  EMAIL_VERIFICATION
+  AUTHORITY_INVITATION
+  PASSWORD_RESET
 }
 
 enum ElectionStatus {
@@ -42,6 +49,7 @@ model User {
   votes              ElectionVote[]         @relation("UserVotes")
   participations     ElectionVoterParticipation[]
   verificationTokens VerificationToken[]
+  trusteeElections   ElectionTrustee[]
 
   @@index([role, status])
 }
@@ -50,6 +58,7 @@ model VerificationToken {
   id        String    @id @default(cuid())
   userId    String
   tokenHash String    @unique
+  type      TokenType @default(EMAIL_VERIFICATION)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime  @default(now())
@@ -57,6 +66,7 @@ model VerificationToken {
 
   @@index([userId, expiresAt])
   @@index([tokenHash])
+  @@index([type, expiresAt])
 }
 
 model Election {
@@ -74,6 +84,7 @@ model Election {
   resultsPublishedAt         DateTime?
   resultsDigest              String?
   merkleRoot                 String?
+  observerAccessCodeHash     String?
   createdById                String
   createdBy                  User                       @relation("ElectionCreator", fields: [createdById], references: [id], onDelete: Restrict)
   candidates                 ElectionCandidate[]
@@ -82,11 +93,27 @@ model Election {
   blocks                     ElectionBlockchainBlock[]
   authorityApprovals         ElectionAuthorityApproval[]
   eligibleVoters             ElectionEligibleVoter[]
+  trustees                   ElectionTrustee[]
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
 
   @@index([status, startTime])
   @@index([createdById, createdAt])
+}
+
+model ElectionTrustee {
+  id          String   @id @default(cuid())
+  electionId  String
+  election    Election @relation(fields: [electionId], references: [id], onDelete: Cascade)
+  authorityId String
+  authority   User     @relation(fields: [authorityId], references: [id], onDelete: Restrict)
+  slotIndex   Int      // Exactly 1, 2, or 3 (permanent Shamir x-coordinate)
+  createdAt   DateTime @default(now())
+
+  @@unique([electionId, authorityId])
+  @@unique([electionId, slotIndex])
+  @@index([authorityId])
+  @@index([electionId])
 }
 
 model ElectionEligibleVoter {

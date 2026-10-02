@@ -86,7 +86,12 @@ export default function LoginPage() {
           <form className="login-form" onSubmit={handleSubmit}>
             <label htmlFor="email">Email address</label>
             <input id="email" autoComplete="username" type="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
-            <div className="password-label"><label htmlFor="password">Password</label></div>
+            <div className="password-label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <label htmlFor="password">Password</label>
+              <Link href="/forgot-password" style={{ fontSize: "0.8rem", color: "#38bdf8", textDecoration: "none" }}>
+                Forgot password?
+              </Link>
+            </div>
             <input id="password" autoComplete="current-password" type="password" required maxLength={1024} value={password} onChange={(event) => setPassword(event.target.value)} />
             {error && <p className="login-error" role="alert">{error}</p>}
             {unverifiedEmail && (

@@ -301,3 +301,14 @@ export function stringifyAuthorityStatus(result: AuthorityThresholdResult): stri
   return `${result.approvals}/${result.required} authorities approved (${result.sharesSubmitted}/${result.required} shares)`;
 }
 
+/**
+ * Convenience helper to reconstruct an election secret from shares with threshold enforcement.
+ */
+export function reconstructElectionSecret(
+  electionId: string,
+  shares: string[],
+  threshold: number = 2
+): string {
+  return reconstructSecretFromShares(shares, threshold, electionId);
+}
+

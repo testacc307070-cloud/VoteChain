@@ -55,18 +55,41 @@ export async function POST(request: Request, context: { params: Promise<{ electi
   let keyShare = existingApproval?.keyShare ?? null;
   if (approved && !keyShare) {
     const masterKey = getElectionEncryptionKey(election, { purpose: "authority_share_generation" });
-    const authorities = await prisma.user.findMany({
-      where: { role: "AUTHORITY" },
-      orderBy: { createdAt: "asc" },
+
+    // Check if the election has assigned trustees in ElectionTrustee
+    const assignedTrustees = await prisma.electionTrustee.findMany({
+      where: { electionId },
+      orderBy: { slotIndex: "asc" },
     });
-    const authIndex = authorities.findIndex((a) => a.id === user.id);
-    if (authIndex < 0) {
-      return NextResponse.json({ error: "You are not a designated authority for this election." }, { status: 403 });
+
+    if (assignedTrustees.length > 0) {
+      const trusteeRecord = assignedTrustees.find((t) => t.authorityId === user.id);
+      if (!trusteeRecord) {
+        return NextResponse.json(
+          { error: "You are not assigned as an authorized trustee for this election." },
+          { status: 403 }
+        );
+      }
+      const slotIndex = trusteeRecord.slotIndex; // 1, 2, or 3
+      const total = 3;
+      const threshold = election.requiredAuthorityApprovals || 2;
+      const shares = splitElectionSecret(election.id, masterKey, total, threshold);
+      keyShare = shares[slotIndex - 1];
+    } else {
+      // Legacy fallback for historical Phase 1–14 elections
+      const authorities = await prisma.user.findMany({
+        where: { role: "AUTHORITY" },
+        orderBy: { createdAt: "asc" },
+      });
+      const authIndex = authorities.findIndex((a) => a.id === user.id);
+      if (authIndex < 0) {
+        return NextResponse.json({ error: "You are not a designated authority for this election." }, { status: 403 });
+      }
+      const total = Math.max(authorities.length, 3);
+      const threshold = election.requiredAuthorityApprovals || 2;
+      const shares = splitElectionSecret(election.id, masterKey, total, threshold);
+      keyShare = shares[authIndex % total];
     }
-    const total = Math.max(authorities.length, 3);
-    const threshold = election.requiredAuthorityApprovals || 2;
-    const shares = splitElectionSecret(election.id, masterKey, total, threshold);
-    keyShare = shares[authIndex % total];
   }
 
   const updatedApproval = await prisma.electionAuthorityApproval.upsert({
@@ -101,20 +124,18 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     },
   });
 
-  const contentType = request.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return NextResponse.json({
-      ok: true,
-      approval: {
-        id: updatedApproval.id,
-        electionId: updatedApproval.electionId,
-        authorityId: updatedApproval.authorityId,
-        approved: updatedApproval.approved,
-        hasKeyShare: Boolean(updatedApproval.keyShare),
-        updatedAt: updatedApproval.updatedAt,
-      },
-    });
-  }
+  const approvals = await prisma.electionAuthorityApproval.findMany({
+    where: { electionId },
+    select: { authorityId: true, approved: true, updatedAt: true },
+  });
 
-  return NextResponse.redirect(new URL("/authority", request.url));
+  return NextResponse.json({
+    approval: {
+      id: updatedApproval.id,
+      approved: updatedApproval.approved,
+      hasKeyShare: Boolean(updatedApproval.keyShare),
+    },
+    electionId,
+    approvals,
+  });
 }

@@ -1,15 +1,18 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { UserRole, UserStatus } from "@prisma/client";
+import { UserRole, UserStatus, TokenType } from "@prisma/client";
 import { prisma } from "@/database/prisma";
 import { requireAdminApi } from "@/backend/voting/admin-api";
+import { generateSecureToken } from "@/backend/auth/token-utils";
+import { sendAuthorityInvitationEmail } from "@/backend/auth/email";
+import { isValidEmail } from "@/backend/auth/auth-validation";
 
 export const runtime = "nodejs";
 
 /**
  * GET /api/admin/authorities
- * Returns the list of configured election authorities/trustees with slot index (1, 2, 3).
+ * Returns the list of configured election authorities/trustees in the global pool.
  * Never exposes passwords or private key shares.
  */
 export async function GET() {
@@ -26,25 +29,30 @@ export async function GET() {
         role: true,
         status: true,
         createdAt: true,
+        trusteeElections: {
+          select: {
+            electionId: true,
+            slotIndex: true,
+          },
+        },
       },
       orderBy: { createdAt: "asc" },
     });
 
     const items = authorities.map((a, index) => ({
       id: a.id,
-      authorityIndex: index + 1, // Slot 1, 2, or 3
+      authorityIndex: index + 1,
       name: a.name,
       email: a.email,
       role: a.role,
       status: a.status,
+      assignedElectionsCount: a.trusteeElections.length,
       createdAt: a.createdAt.toISOString(),
     }));
 
     return NextResponse.json({
       authorities: items,
       totalCount: items.length,
-      maxAllowed: 3,
-      canAddMore: items.length < 3,
     });
   } catch {
     return NextResponse.json({ error: "Could not retrieve authority list." }, { status: 500 });
@@ -53,9 +61,9 @@ export async function GET() {
 
 /**
  * POST /api/admin/authorities
- * Creates and invites a new authority trustee account.
- * Enforces maximum of 3 authorities for the 2-of-3 threshold custody system.
- * Enforces strict role isolation from voters.
+ * Supports both invitation-based creation (recommended) and direct provisioning.
+ * Allows flexible institutional/personal email domains.
+ * Enforces role isolation from voters.
  */
 export async function POST(request: Request) {
   const auth = await requireAdminApi();
@@ -72,45 +80,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request payload." }, { status: 400 });
   }
 
-  const { name, email, password } = body as {
+  const { name, email, password, invite } = body as {
     name?: unknown;
     email?: unknown;
     password?: unknown;
+    invite?: unknown;
   };
 
   const cleanName = String(name ?? "").trim();
   const cleanEmail = String(email ?? "").trim().toLowerCase();
-  const rawPassword = String(password ?? "");
+  const rawPassword = password ? String(password) : "";
+  const isInviteFlow = invite === true || !rawPassword;
 
   if (!cleanName || cleanName.length < 2 || cleanName.length > 80) {
     return NextResponse.json({ error: "Full Name must be between 2 and 80 characters." }, { status: 400 });
   }
 
-  if (!cleanEmail || !cleanEmail.includes("@") || cleanEmail.length > 254) {
+  if (!cleanEmail || !isValidEmail(cleanEmail)) {
     return NextResponse.json({ error: "A valid email address is required." }, { status: 400 });
   }
 
-  if (!rawPassword || rawPassword.length < 8 || rawPassword.length > 128) {
-    return NextResponse.json({ error: "Temporary password must be at least 8 characters long." }, { status: 400 });
-  }
-
   try {
-    // 1. Verify that fewer than 3 authorities currently exist
-    const currentAuthorities = await prisma.user.findMany({
-      where: { role: UserRole.AUTHORITY },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (currentAuthorities.length >= 3) {
-      return NextResponse.json(
-        {
-          error: "Maximum limit of 3 election authorities reached. VoteChain enforces exactly 3 trustees for 2-of-3 threshold custody.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // 2. Check for duplicate email across all accounts
+    // 1. Check for duplicate email across all accounts
     const existingUser = await prisma.user.findUnique({
       where: { email: cleanEmail },
     });
@@ -122,7 +113,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Ensure role isolation from voters: authority cannot be in any election eligibility list
+    // 2. Ensure role isolation from voters: authority cannot be in any election eligibility list
     const registeredVoter = await prisma.electionEligibleVoter.findFirst({
       where: { email: cleanEmail },
     });
@@ -136,55 +127,128 @@ export async function POST(request: Request) {
       );
     }
 
-    const assignedSlot = currentAuthorities.length + 1;
-    const passwordHash = await bcrypt.hash(rawPassword, 12);
-
-    const newAuthority = await prisma.user.create({
-      data: {
-        name: cleanName,
-        email: cleanEmail,
-        passwordHash,
-        role: UserRole.AUTHORITY,
-        status: UserStatus.ACTIVE,
-        emailVerified: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    // Record append-only audit event
-    await prisma.auditLog.create({
-      data: {
-        eventType: "AUTHORITY_CREATED",
-        actorReference: `admin:${auth.user.email}`,
-        details: `Created Authority Trustee #${assignedSlot}: "${newAuthority.name}" (${newAuthority.email}).`,
-        eventHash: createHash("sha256").update(`${newAuthority.id}:${assignedSlot}:${Date.now()}`).digest("hex"),
-      },
-    });
-
-    return NextResponse.json(
-      {
-        ok: true,
-        authority: {
-          id: newAuthority.id,
-          authorityIndex: assignedSlot,
-          name: newAuthority.name,
-          email: newAuthority.email,
-          role: newAuthority.role,
-          status: newAuthority.status,
-          createdAt: newAuthority.createdAt.toISOString(),
+    if (isInviteFlow) {
+      // INVITATION FLOW: Create user with INVITED status and send setup email
+      const randomPasswordMarker = await bcrypt.hash(Date.now().toString() + Math.random().toString(), 12);
+      const newAuthority = await prisma.user.create({
+        data: {
+          name: cleanName,
+          email: cleanEmail,
+          passwordHash: randomPasswordMarker,
+          role: UserRole.AUTHORITY,
+          status: UserStatus.INVITED,
+          emailVerified: false,
         },
-      },
-      { status: 201 }
-    );
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      // Generate 256-bit CSPRNG token and store SHA-256 hash
+      const { rawToken, tokenHash } = generateSecureToken();
+      await prisma.verificationToken.create({
+        data: {
+          userId: newAuthority.id,
+          tokenHash,
+          type: TokenType.AUTHORITY_INVITATION,
+          expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000), // 48-hour expiration
+        },
+      });
+
+      // Send invitation email via admin mailer
+      const emailResult = await sendAuthorityInvitationEmail({
+        to: newAuthority.email,
+        name: newAuthority.name,
+        token: rawToken,
+      });
+
+      // Record append-only audit event (zero raw tokens in logs)
+      await prisma.auditLog.create({
+        data: {
+          eventType: "AUTHORITY_INVITED",
+          actorReference: `admin:${auth.user.email}`,
+          details: `Invited Authority Trustee: "${newAuthority.name}" (${newAuthority.email}).`,
+          eventHash: createHash("sha256").update(`${newAuthority.id}:INVITED:${Date.now()}`).digest("hex"),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          invited: true,
+          authority: {
+            id: newAuthority.id,
+            name: newAuthority.name,
+            email: newAuthority.email,
+            role: newAuthority.role,
+            status: newAuthority.status,
+            createdAt: newAuthority.createdAt.toISOString(),
+          },
+          emailDelivery: {
+            sent: emailResult.success,
+            error: emailResult.error,
+          },
+        },
+        { status: 201 }
+      );
+    } else {
+      // DIRECT PROVISIONING (with explicit password)
+      if (rawPassword.length < 8 || rawPassword.length > 128) {
+        return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
+      }
+
+      const passwordHash = await bcrypt.hash(rawPassword, 12);
+      const newAuthority = await prisma.user.create({
+        data: {
+          name: cleanName,
+          email: cleanEmail,
+          passwordHash,
+          role: UserRole.AUTHORITY,
+          status: UserStatus.ACTIVE,
+          emailVerified: true,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          eventType: "AUTHORITY_CREATED",
+          actorReference: `admin:${auth.user.email}`,
+          details: `Directly created Authority Trustee: "${newAuthority.name}" (${newAuthority.email}).`,
+          eventHash: createHash("sha256").update(`${newAuthority.id}:CREATED:${Date.now()}`).digest("hex"),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          ok: true,
+          invited: false,
+          authority: {
+            id: newAuthority.id,
+            name: newAuthority.name,
+            email: newAuthority.email,
+            role: newAuthority.role,
+            status: newAuthority.status,
+            createdAt: newAuthority.createdAt.toISOString(),
+          },
+        },
+        { status: 201 }
+      );
+    }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not create authority account.";
+    const message = error instanceof Error ? error.message : "Could not process authority creation.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

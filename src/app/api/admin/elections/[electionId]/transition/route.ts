@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { ElectionStatus } from "@prisma/client";
+import { ElectionStatus, UserRole, UserStatus } from "@prisma/client";
 import { requireAdminApi } from "@/backend/voting/admin-api";
 import { prisma } from "@/database/prisma";
 import { evaluateAuthorityThreshold } from "@/security/threshold";
@@ -49,6 +49,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       include: {
         _count: { select: { candidates: true, votes: true } },
         blocks: { orderBy: { index: "asc" } },
+        trustees: true,
       },
     });
     if (!election) return NextResponse.json({ error: "Election not found." }, { status: 404 });
@@ -73,6 +74,26 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       if (now >= election.endTime) {
         return NextResponse.json({ error: "The election end time has already passed." }, { status: 409 });
       }
+
+      // Ensure exactly 3 trustees are assigned for modern elections
+      if (election.trustees.length === 0) {
+        const activeAuthorities = await prisma.user.findMany({
+          where: { role: UserRole.AUTHORITY, status: UserStatus.ACTIVE },
+          orderBy: { createdAt: "asc" },
+          take: 3,
+        });
+
+        if (activeAuthorities.length >= 3) {
+          await prisma.electionTrustee.createMany({
+            data: activeAuthorities.slice(0, 3).map((a, idx) => ({
+              electionId,
+              authorityId: a.id,
+              slotIndex: idx + 1,
+            })),
+          });
+        }
+      }
+
       nextStatus = ElectionStatus.UPCOMING;
       extraData = { candidatesLocked: true };
     } else if (action === "activate") {
