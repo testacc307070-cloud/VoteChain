@@ -288,8 +288,37 @@ npm run build
 
 ---
 
-## 9. Important Limitations & Prototype Scope
+## 9. Admin Management & Election Controls
 
+VoteChain provides secure administrative capabilities for classroom election administrators:
+
+### Admin Credentials & Password Management
+- **Default Account**: Created during database seeding (`admin@votechain.local`).
+- **Role & Route**: Authenticates at `/api/auth/login` and lands directly on the System Console at `/`.
+- **Secure Password Reset / Creation (CLI)**:
+  To safely reset the administrator password or create a new admin account without exposing secrets or hardcoding credentials:
+  ```powershell
+  npx tsx --env-file=.env scripts/create-or-reset-admin.ts [email] [newPassword]
+  ```
+  *(Requires a minimum 12-character password. Automatically hashes with Bcrypt cost factor 12).*
+
+### 2-of-3 Authority Trustee Management
+- **Dashboard Navigation**: Access via the **Authorities** tab on the Admin Dashboard (`/`).
+- **3-Trustee Custody**: Exactly 3 authority accounts hold Shamir key shares (Slot 1, 2, and 3).
+- **Enforced Limits**: The system enforces a strict maximum of 3 authorities.
+- **Role Isolation**: Authority accounts are strictly segregated from voters and cannot be enrolled as eligible voters.
+- **Zero Secret Exposure**: Key shares are generated only upon threshold sign-off and are never leaked to client bundles or APIs.
+
+### Election Lifecycle Controls
+- **Close Election Now**: Allows an administrator to conclude an `ACTIVE` election ahead of schedule with explicit confirmation. Immediately halts new ballots (HTTP 409) while permanently preserving all cast votes and on-chain records.
+- **Safe Election Deletion**:
+  - **Unvoted Elections (0 votes)**: Can be safely deleted with cascading cleanup.
+  - **Voted Elections (>0 votes)**: Deletion is strictly blocked (HTTP 400) to protect the cryptographic audit trail and immutable Ethereum Sepolia commitments. Administrators must use "Close Election Now" instead.
+
+---
+
+## 10. Important Limitations & Prototype Scope
+ 
 VoteChain is an educational and research prototype. To maintain scientific integrity, the following limitations are explicitly noted:
 1. **Institutional Domain Authentication**: Proves possession of an `@psgtech.ac.in` email account via single-use token; does not independently establish biometric identity.
 2. **Relayer Relies on Server Infrastructure**: In this prototype, transactions are relayed by a funded server wallet rather than individual voter wallets to eliminate the barrier of requiring students to hold cryptocurrency.
@@ -299,6 +328,6 @@ VoteChain is an educational and research prototype. To maintain scientific integ
 
 ---
 
-## 10. License
+## 11. License
 
 This project is released for academic, research, and educational purposes.

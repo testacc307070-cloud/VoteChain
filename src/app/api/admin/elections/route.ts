@@ -14,12 +14,16 @@ export async function GET() {
   try {
     const elections = await prisma.election.findMany({
       orderBy: [{ updatedAt: "desc" }],
-      include: { candidates: { orderBy: { sortOrder: "asc" } } },
+      include: {
+        candidates: { orderBy: { sortOrder: "asc" } },
+        _count: { select: { votes: true } },
+      },
     });
     const sanitizedElections = elections.map((e) => {
       const { encryptedMasterKey, ...safe } = e;
       return {
         ...safe,
+        votesCount: e._count.votes,
         hasMasterKey: Boolean(encryptedMasterKey),
       };
     });

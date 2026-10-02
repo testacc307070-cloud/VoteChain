@@ -23,7 +23,19 @@ export async function POST(request: Request, context: { params: Promise<{ electi
     return NextResponse.json({ error: "Provide a lifecycle action." }, { status: 400 });
   }
   const action = (body as { action: unknown }).action;
-  if (action !== "lock" && action !== "activate" && action !== "close" && action !== "publish") {
+  const isEarlyRequested =
+    action === "close_early" ||
+    action === "close-early" ||
+    Boolean((body as { early?: unknown })?.early);
+
+  if (
+    action !== "lock" &&
+    action !== "activate" &&
+    action !== "close" &&
+    action !== "close_early" &&
+    action !== "close-early" &&
+    action !== "publish"
+  ) {
     return NextResponse.json({ error: "Unknown lifecycle action." }, { status: 400 });
   }
 
@@ -43,7 +55,13 @@ export async function POST(request: Request, context: { params: Promise<{ electi
 
     const now = new Date();
     let nextStatus: ElectionStatus;
-    let extraData: { candidatesLocked?: boolean; resultsPublishedAt?: Date; merkleRoot?: string; resultsDigest?: string } = {};
+    let extraData: {
+      candidatesLocked?: boolean;
+      resultsPublishedAt?: Date;
+      merkleRoot?: string;
+      resultsDigest?: string;
+      endTime?: Date;
+    } = {};
 
     if (action === "lock") {
       if (election.status !== ElectionStatus.DRAFT || election.candidatesLocked) {
@@ -65,14 +83,20 @@ export async function POST(request: Request, context: { params: Promise<{ electi
         return NextResponse.json({ error: "Activation is allowed only during the configured election window." }, { status: 409 });
       }
       nextStatus = ElectionStatus.ACTIVE;
-    } else if (action === "close") {
+    } else if (action === "close" || action === "close_early" || action === "close-early") {
       if (election.status !== ElectionStatus.ACTIVE) {
         return NextResponse.json({ error: "Only an active election can be closed." }, { status: 409 });
       }
-      if (now < election.endTime) {
-        return NextResponse.json({ error: "The configured election end time has not been reached." }, { status: 409 });
+      if (!isEarlyRequested && now < election.endTime) {
+        return NextResponse.json(
+          { error: "The configured election end time has not been reached. Confirm early closure to end voting immediately." },
+          { status: 409 }
+        );
       }
       nextStatus = ElectionStatus.CLOSED;
+      if (now < election.endTime) {
+        extraData = { endTime: now };
+      }
     } else {
       if (election.status !== ElectionStatus.CLOSED) {
         return NextResponse.json({ error: "Results can be published only after an election closes." }, { status: 409 });
@@ -111,14 +135,20 @@ export async function POST(request: Request, context: { params: Promise<{ electi
       data: { status: nextStatus, ...extraData },
     });
 
+    const isEarlyClose = (action === "close_early" || action === "close-early" || isEarlyRequested) && now < election.endTime;
+    const auditEventType = isEarlyClose ? "ELECTION_CLOSED_EARLY" : `ELECTION_STATUS_${nextStatus}`;
+    const auditDetails = isEarlyClose
+      ? `Election "${election.name}" was closed early by administrator. Preserved ${election._count.votes} votes.`
+      : `Election "${election.name}" transitioned to ${nextStatus}. Action: ${action}.`;
+
     // Record append-only audit event
     await prisma.auditLog.create({
       data: {
-        eventType: `ELECTION_STATUS_${nextStatus}`,
+        eventType: auditEventType,
         actorReference: `admin:${auth.user.email}`,
         electionId: election.id,
-        details: `Election "${election.name}" transitioned to ${nextStatus}. Action: ${action}.`,
-        eventHash: createHash("sha256").update(`${election.id}:${nextStatus}:${now.toISOString()}`).digest("hex"),
+        details: auditDetails,
+        eventHash: createHash("sha256").update(`${election.id}:${nextStatus}:${now.toISOString()}:${auditEventType}`).digest("hex"),
       },
     });
 

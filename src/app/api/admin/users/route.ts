@@ -75,6 +75,23 @@ export async function POST(request: Request) {
       );
     }
 
+    if (role === UserRole.AUTHORITY) {
+      const authCount = await prisma.user.count({ where: { role: UserRole.AUTHORITY } });
+      if (authCount >= 3) {
+        return NextResponse.json(
+          { error: "Maximum limit of 3 election authorities reached. VoteChain enforces exactly 3 trustees for 2-of-3 threshold custody." },
+          { status: 400 }
+        );
+      }
+      const inVoterList = await prisma.electionEligibleVoter.findFirst({ where: { email } });
+      if (inVoterList) {
+        return NextResponse.json(
+          { error: "This email is registered in an election voter eligibility list. Authority accounts must be strictly isolated from voter roles." },
+          { status: 400 }
+        );
+      }
+    }
+
     const existingUser = await prisma.user.findFirst({
       where: {
         OR: [

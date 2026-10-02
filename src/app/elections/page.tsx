@@ -10,12 +10,16 @@ export default async function ElectionsPage() {
 
   const elections = await prisma.election.findMany({
     orderBy: [{ updatedAt: "desc" }],
-    include: { candidates: { orderBy: { sortOrder: "asc" } } },
+    include: {
+      candidates: { orderBy: { sortOrder: "asc" } },
+      _count: { select: { votes: true } },
+    },
   });
   const initialElections = elections.map((election) => ({
     ...election,
     startTime: election.startTime.toISOString(),
     endTime: election.endTime.toISOString(),
+    votesCount: election._count.votes,
   }));
 
   return <ElectionManager displayName={user.name} initialElections={initialElections} />;

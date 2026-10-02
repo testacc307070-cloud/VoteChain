@@ -14,4 +14,5 @@ export type ElectionRecord = {
   status: "DRAFT" | "UPCOMING" | "ACTIVE" | "CLOSED" | "RESULTS_PUBLISHED";
   candidatesLocked: boolean;
   candidates: CandidateRecord[];
+  votesCount?: number;
 };

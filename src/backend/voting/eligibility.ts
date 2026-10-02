@@ -208,10 +208,25 @@ export async function importElectionEligibilityList(
       });
     }
 
+    // 2.5 Ensure authority accounts cannot be registered as eligible voters (role isolation)
+    const existingAuthorities = await tx.user.findMany({
+      where: {
+        email: { in: uniqueRecords.map((r) => r.email) },
+        role: "AUTHORITY",
+      },
+      select: { email: true },
+    });
+    if (existingAuthorities.length > 0) {
+      throw new Error(
+        `Cannot register authority accounts as eligible voters: ${existingAuthorities.map((a) => a.email).join(", ")}. Authority accounts must remain strictly isolated from voter roles.`
+      );
+    }
+
     // 3. Find any registered users that match these emails and update election.eligibleVoterIds
     const matchingUsers = await tx.user.findMany({
       where: {
         email: { in: uniqueRecords.map((r) => r.email) },
+        role: "VOTER",
       },
       select: { id: true },
     });

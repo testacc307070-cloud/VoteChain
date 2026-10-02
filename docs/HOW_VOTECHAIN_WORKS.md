@@ -155,6 +155,37 @@ VoteChain maintains a dual-ledger architecture:
     $$H_{\text{parent}} = \text{SHA-256}(H_{\text{left}} : H_{\text{right}})$$
   - If the computed hash matches the certified Merkle root, it proves mathematically that the voter's ballot was included in the official tally without revealing the voter's candidate selection.
 
+### 3.8 Administrator Management & Election Lifecycle Controls
+VoteChain provides robust administrative capabilities strictly guarded by server-side role validation (`requireAdminApi` in `src/backend/voting/admin-api.ts`):
+
+1. **Admin Authentication & CLI Recovery**:
+   - The `ADMIN` account authenticates at `/api/auth/login` and is routed directly to the System Console at `/`.
+   - Admin credentials are protected with Bcrypt (cost factor 12).
+   - A standalone CLI management script (`scripts/create-or-reset-admin.ts`) enables operators to safely reset administrator passwords without exposing database credentials or hardcoding secrets:
+     ```bash
+     npx tsx --env-file=.env scripts/create-or-reset-admin.ts [email] [newPassword]
+     ```
+
+2. **Multi-Party Authority Trustee Management**:
+   - Managed via `/api/admin/authorities` and the Admin Dashboard.
+   - Exactly **3 authority accounts** (Authority 1, Authority 2, Authority 3) hold key shares in the 2-of-3 threshold custody system.
+   - System enforces a hard ceiling of 3 authorities; creation attempts beyond 3 are rejected with HTTP 400.
+   - **Strict Role Isolation**: Authority accounts are prohibited from voting. If an authority email is included in a class eligibility list, the upload is rejected.
+   - Private Shamir shares are generated only upon threshold sign-off and are never returned in administrative GET/POST responses.
+
+3. **Early Election Closure ("Close Election Now")**:
+   - Allows administrators to terminate an `ACTIVE` election ahead of its configured `endTime` via `/api/admin/elections/[electionId]/close` or `/transition`.
+   - Requires explicit confirmation via modal dialog.
+   - Immediately halts voting; subsequent ballot cast attempts return HTTP 409 (`Voting is only available while an election is active`).
+   - Sets the effective `endTime` to `now()`, preserves all cast ballots and blockchain commitments, and permanently prevents reopening.
+   - Records an append-only audit event: `ELECTION_CLOSED_EARLY`.
+
+4. **Safe Election Deletion & Audit Invariant**:
+   - Managed via `DELETE /api/admin/elections/[electionId]`.
+   - **Audit Trail Preservation Rule**: Elections with recorded votes (`votesCount > 0` or `participationsCount > 0`) **cannot be deleted** (HTTP 400). This protects the integrity of immutable Ethereum Sepolia transactions and Merkle inclusion proofs.
+   - **Unvoted Elections**: Elections with 0 cast votes can be safely deleted. Cascading deletion safely purges candidates, eligibility mappings, and blocks inside an atomic database transaction.
+   - Requires explicit confirmation dialog with confirmation text validation in the UI.
+
 ---
 
 ## 4. Implementation Status Matrix

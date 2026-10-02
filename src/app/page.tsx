@@ -4,6 +4,8 @@ import DashboardClient, {
   type DashboardMetrics,
   type ActivityItem,
   type UserItem,
+  type AuthorityItem,
+  type DashboardElectionItem,
 } from "@/frontend/components/dashboard-client";
 import { getCurrentUser } from "@/backend/auth/session";
 
@@ -12,7 +14,15 @@ export default async function HomePage() {
   if (!user) redirect("/login");
   if (user.role !== "ADMIN") redirect("/portal");
 
-  const [votersCount, totalVotes, activeElection, rawAuditLogs, rawUsers] = await Promise.all([
+  const [
+    votersCount,
+    totalVotes,
+    activeElection,
+    rawAuditLogs,
+    rawUsers,
+    rawAuthorities,
+    rawAllElections,
+  ] = await Promise.all([
     prisma.user.count({ where: { role: "VOTER" } }),
     prisma.electionVote.count(),
     prisma.election.findFirst({
@@ -23,7 +33,7 @@ export default async function HomePage() {
       },
     }),
     prisma.auditLog.findMany({
-      take: 6,
+      take: 8,
       orderBy: { timestamp: "desc" },
     }),
     prisma.user.findMany({
@@ -38,6 +48,25 @@ export default async function HomePage() {
       },
       orderBy: [{ role: "asc" }, { createdAt: "desc" }],
     }),
+    prisma.user.findMany({
+      where: { role: "AUTHORITY" },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.election.findMany({
+      orderBy: [{ updatedAt: "desc" }],
+      include: {
+        candidates: { orderBy: { sortOrder: "asc" } },
+        _count: { select: { votes: true } },
+      },
+    }),
   ]);
 
   const activeElectionsCount = activeElection ? 1 : 0;
@@ -51,6 +80,7 @@ export default async function HomePage() {
     activeElectionsCount,
     totalVotes,
     participationRate,
+    authoritiesCount: rawAuthorities.length,
     activeElection: activeElection
       ? {
           id: activeElection.id,
@@ -87,6 +117,27 @@ export default async function HomePage() {
     createdAt: u.createdAt.toISOString(),
   }));
 
+  const initialAuthorities: AuthorityItem[] = rawAuthorities.map((a, idx) => ({
+    id: a.id,
+    authorityIndex: idx + 1,
+    name: a.name,
+    email: a.email,
+    role: a.role,
+    status: a.status,
+    createdAt: a.createdAt.toISOString(),
+  }));
+
+  const initialElections: DashboardElectionItem[] = rawAllElections.map((e) => ({
+    id: e.id,
+    name: e.name,
+    description: e.description,
+    status: e.status,
+    startTime: e.startTime.toISOString(),
+    endTime: e.endTime.toISOString(),
+    candidatesCount: e.candidates.length,
+    votesCount: e._count.votes,
+  }));
+
   return (
     <DashboardClient
       displayName={user.name}
@@ -94,6 +145,8 @@ export default async function HomePage() {
       metrics={metrics}
       recentActivities={recentActivities}
       initialUsers={initialUsers}
+      initialAuthorities={initialAuthorities}
+      initialElections={initialElections}
     />
   );
 }
