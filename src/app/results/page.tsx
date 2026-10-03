@@ -41,6 +41,19 @@ export default async function ResultsPage() {
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          {user?.role === "ADMIN" && (
+            <nav style={{ display: "flex", gap: "14px", alignItems: "center", marginRight: "0.5rem" }}>
+              <Link href="/" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Overview
+              </Link>
+              <Link href="/elections" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Elections
+              </Link>
+              <Link href="/audit" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Audit Trail
+              </Link>
+            </nav>
+          )}
           {user ? (
             <form action="/api/auth/logout" method="post">
               <button className="portal-signout" type="submit">Sign out</button>
@@ -166,36 +179,90 @@ export default async function ResultsPage() {
                     <span className="election-status status-results_published"><i />{election.status}</span>
                   </div>
 
-                  <div className="record-metadata">
-                    <span><strong>Total votes:</strong> {summary.totalVotes}</span>
-                    <span><strong>Winner:</strong> {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount})` : "No votes"}</span>
-                    <span><strong>Digest:</strong> {digest.slice(0, 24)}...</span>
-                    <span><strong>Status:</strong> {integrity.status}</span>
-                    <span><strong>Merkle root:</strong> {integrity.merkleRoot.slice(0, 24)}...</span>
-                    <span><strong>Block height:</strong> {integrity.blockHeight}</span>
-                    <span><strong>Ledger valid:</strong> {verifyBlockchainChain(blockChain) ? "VALID" : "INVALID"}</span>
-                    <span><strong>Head hash:</strong> {blockchainSummary.headHash.slice(0, 18)}...</span>
-                    <span><strong>Authority threshold:</strong> {stringifyAuthorityStatus(authorityStatus)}</span>
-                    <span><strong>QR ref:</strong> {qrReference.slice(0, 28)}...</span>
-                  </div>
-
-                  <div className="record-candidates" style={{ marginTop: "1rem" }}>
-                    {summary.candidateResults.map((candidate) => (
-                      <div className="candidate-readonly" key={candidate.candidateId}>
-                        <span className="candidate-order">{candidate.voteCount}</span>
-                        <span className="candidate-readonly-name">{candidate.name}<small>{candidate.voteCount} votes</small></span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div style={{ marginTop: "1rem", display: "grid", gap: "0.75rem", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)" }}>
-                    <div className="candidate-readonly" style={{ alignItems: "center" }}>
-                      <span className="candidate-order">QR</span>
-                      <span className="candidate-readonly-name"><QrCode value={qrReference} /><small>Scan to open public verification</small></span>
+                  <div className="results-metadata-grid">
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Total Votes Cast</span>
+                      <strong className="results-meta-value">{summary.totalVotes}</strong>
                     </div>
-                    <div className="candidate-readonly">
-                      <span className="candidate-order">REF</span>
-                      <span className="candidate-readonly-name">Election verification reference<small>{qrReference}</small></span>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Winner</span>
+                      <strong className="results-meta-value results-meta-winner">
+                        {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount} votes)` : "No votes recorded"}
+                      </strong>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Audit Digest</span>
+                      <code className="results-meta-mono">{digest.slice(0, 24)}...</code>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Integrity Status</span>
+                      <span className="results-meta-badge results-badge-success">{integrity.status}</span>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Merkle Root</span>
+                      <code className="results-meta-mono">{integrity.merkleRoot.slice(0, 24)}...</code>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Block Height</span>
+                      <strong className="results-meta-value">{integrity.blockHeight} blocks</strong>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Ledger Validation</span>
+                      <span className={`results-meta-badge ${verifyBlockchainChain(blockChain) ? "results-badge-success" : "results-badge-error"}`}>
+                        {verifyBlockchainChain(blockChain) ? "CHAIN VALID" : "INVALID"}
+                      </span>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Head Block Hash</span>
+                      <code className="results-meta-mono">{blockchainSummary.headHash.slice(0, 20)}...</code>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Authority Threshold</span>
+                      <strong className="results-meta-value">{stringifyAuthorityStatus(authorityStatus)}</strong>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Verification Ref</span>
+                      <code className="results-meta-mono">{qrReference.slice(0, 24)}...</code>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: "1.5rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                      <strong style={{ fontSize: "12px", color: "#37453d" }}>Candidate Results</strong>
+                      <span style={{ fontSize: "10px", color: "#85938a" }}>{summary.totalVotes} total verified votes</span>
+                    </div>
+                    <div className="record-candidates">
+                      {summary.candidateResults.map((candidate) => {
+                        const pct = summary.totalVotes > 0 ? Math.round((candidate.voteCount / summary.totalVotes) * 100) : 0;
+                        return (
+                          <div className="candidate-tally-row" key={candidate.candidateId}>
+                            <div className="candidate-tally-info">
+                              <span className="candidate-tally-name">{candidate.name}</span>
+                              <span className="candidate-tally-count">
+                                <strong>{candidate.voteCount}</strong> votes ({pct}%)
+                              </span>
+                            </div>
+                            <div className="candidate-tally-bar-bg">
+                              <div className="candidate-tally-bar-fill" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="results-verification-section">
+                    <div className="results-qr-card">
+                      <div className="qr-container">
+                        <QrCode value={qrReference} />
+                      </div>
+                      <div className="qr-info">
+                        <h4>Public Verification QR Code</h4>
+                        <p>Scan with any mobile device or camera to verify zero-knowledge ballot inclusion and Merkle tree root commitments.</p>
+                        <div className="qr-ref-box">
+                          <code>{qrReference}</code>
+                        </div>
+                      </div>
                     </div>
                   </div>
 

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { ArrowRight, CheckCircle2, Fingerprint, Mail, RefreshCw, UserPlus } from "lucide-react";
 import Link from "next/link";
+import PasswordInput from "@/frontend/components/password-input";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -212,9 +213,8 @@ export default function RegisterPage() {
               <div className="password-label">
                 <label htmlFor="password">Password (min 8 characters)</label>
               </div>
-              <input
+              <PasswordInput
                 id="password"
-                type="password"
                 required
                 minLength={8}
                 maxLength={1024}
@@ -225,9 +225,8 @@ export default function RegisterPage() {
               <div className="password-label">
                 <label htmlFor="confirmPassword">Confirm Password</label>
               </div>
-              <input
+              <PasswordInput
                 id="confirmPassword"
-                type="password"
                 required
                 minLength={8}
                 maxLength={1024}

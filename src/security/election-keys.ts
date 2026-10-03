@@ -86,7 +86,7 @@ export function getElectionEncryptionKey(
     // Phase 9.3 Hard Rule: Direct master key bypass is strictly forbidden for results tallying
     if (options?.purpose === "results_tally") {
       throw new Error(
-        "Direct master key resolution is forbidden for results tallying in Phase 9+. Results must be decrypted exclusively using 2-of-3 reconstructed authority shares.",
+        "Direct master key resolution is forbidden for results tallying. Results must be decrypted exclusively using 2-of-3 reconstructed authority shares.",
       );
     }
 

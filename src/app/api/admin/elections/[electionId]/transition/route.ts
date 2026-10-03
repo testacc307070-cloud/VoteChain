@@ -75,8 +75,18 @@ export async function POST(request: Request, context: { params: Promise<{ electi
         return NextResponse.json({ error: "The election end time has already passed." }, { status: 409 });
       }
 
-      // Ensure exactly 3 trustees are assigned for modern elections
-      if (election.trustees.length === 0) {
+      // 1. Ensure at least one eligible voter is configured (via CSV upload)
+      const eligibleCount = await prisma.electionEligibleVoter.count({ where: { electionId } });
+      if (eligibleCount === 0 && election.eligibleVoterIds.length === 0) {
+        return NextResponse.json(
+          { error: "Eligible voters must be configured (via CSV upload) before locking the election." },
+          { status: 400 }
+        );
+      }
+
+      // 2. Ensure exactly 3 trustees are assigned for modern elections
+      let currentTrusteesCount = await prisma.electionTrustee.count({ where: { electionId } });
+      if (currentTrusteesCount === 0) {
         const activeAuthorities = await prisma.user.findMany({
           where: { role: UserRole.AUTHORITY, status: UserStatus.ACTIVE },
           orderBy: { createdAt: "asc" },
@@ -91,7 +101,15 @@ export async function POST(request: Request, context: { params: Promise<{ electi
               slotIndex: idx + 1,
             })),
           });
+          currentTrusteesCount = 3;
         }
+      }
+
+      if (currentTrusteesCount !== 3) {
+        return NextResponse.json(
+          { error: `Exactly 3 distinct active authority trustees must be assigned before locking the election. Currently assigned: ${currentTrusteesCount}/3.` },
+          { status: 400 }
+        );
       }
 
       nextStatus = ElectionStatus.UPCOMING;

@@ -16,7 +16,13 @@ export async function GET() {
       orderBy: [{ updatedAt: "desc" }],
       include: {
         candidates: { orderBy: { sortOrder: "asc" } },
-        _count: { select: { votes: true } },
+        trustees: {
+          include: {
+            authority: { select: { id: true, name: true, email: true, status: true } },
+          },
+          orderBy: { slotIndex: "asc" },
+        },
+        _count: { select: { votes: true, eligibleVoters: true, trustees: true } },
       },
     });
     const sanitizedElections = elections.map((e) => {
@@ -24,6 +30,8 @@ export async function GET() {
       return {
         ...safe,
         votesCount: e._count.votes,
+        eligibleVotersCount: e._count.eligibleVoters,
+        trusteesCount: e._count.trustees,
         hasMasterKey: Boolean(encryptedMasterKey),
       };
     });

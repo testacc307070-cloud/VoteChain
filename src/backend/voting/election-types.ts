@@ -5,6 +5,18 @@ export type CandidateRecord = {
   sortOrder: number;
 };
 
+export type ElectionTrusteeRecord = {
+  id: string;
+  authorityId: string;
+  slotIndex: number;
+  authority: {
+    id: string;
+    name: string;
+    email: string;
+    status: string;
+  };
+};
+
 export type ElectionRecord = {
   id: string;
   name: string;
@@ -15,4 +27,8 @@ export type ElectionRecord = {
   candidatesLocked: boolean;
   candidates: CandidateRecord[];
   votesCount?: number;
+  eligibleVotersCount?: number;
+  trusteesCount?: number;
+  trustees?: ElectionTrusteeRecord[];
+  observerAccessCodeHash?: string | null;
 };

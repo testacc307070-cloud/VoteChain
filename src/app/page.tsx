@@ -20,7 +20,6 @@ export default async function HomePage() {
     activeElection,
     rawAuditLogs,
     rawUsers,
-    rawAuthorities,
     rawAllElections,
   ] = await Promise.all([
     prisma.user.count({ where: { role: "VOTER" } }),
@@ -48,18 +47,6 @@ export default async function HomePage() {
       },
       orderBy: [{ role: "asc" }, { createdAt: "desc" }],
     }),
-    prisma.user.findMany({
-      where: { role: "AUTHORITY" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "asc" },
-    }),
     prisma.election.findMany({
       orderBy: [{ updatedAt: "desc" }],
       include: {
@@ -68,6 +55,18 @@ export default async function HomePage() {
       },
     }),
   ]);
+
+  const rawAuthorities = rawUsers
+    .filter((u) => u.role === "AUTHORITY")
+    .map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      status: u.status,
+      createdAt: u.createdAt,
+    }))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   const activeElectionsCount = activeElection ? 1 : 0;
   const participationRate =

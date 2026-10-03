@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ElectionRecord } from "@/backend/voting/election-types";
@@ -17,6 +17,7 @@ import {
   LogOut,
   Save,
   ShieldAlert,
+  ShieldCheck,
   StopCircle,
   Trash2,
   Upload,
@@ -75,6 +76,27 @@ export default function ElectionManager({ displayName, initialElections }: Elect
     .toUpperCase();
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [selectedCsvFiles, setSelectedCsvFiles] = useState<Record<string, string>>({});
+  const [csvValidationErrors, setCsvValidationErrors] = useState<Record<string, { error: string; errors?: string[] }>>({});
+  const [csvSuccesses, setCsvSuccesses] = useState<Record<string, string>>({});
+
+  // Active authorities for trustee assignment
+  const [activeAuthorities, setActiveAuthorities] = useState<Array<{ id: string; name: string; email: string; status: string }>>([]);
+
+  useEffect(() => {
+    async function loadAuthorities() {
+      try {
+        const res = await fetch("/api/admin/authorities");
+        const data = await res.json();
+        if (Array.isArray(data.authorities)) {
+          setActiveAuthorities(data.authorities.filter((a: any) => a.status === "ACTIVE"));
+        }
+      } catch {
+        // non-blocking
+      }
+    }
+    void loadAuthorities();
+  }, []);
 
   // Modals for Close Early and Delete
   const [closingElection, setClosingElection] = useState<Election | null>(null);
@@ -96,6 +118,18 @@ export default function ElectionManager({ displayName, initialElections }: Elect
     setUploadingId(electionId);
     setError("");
     setMessage("");
+    setSelectedCsvFiles((prev) => ({ ...prev, [electionId]: file.name }));
+    setCsvValidationErrors((prev) => {
+      const next = { ...prev };
+      delete next[electionId];
+      return next;
+    });
+    setCsvSuccesses((prev) => {
+      const next = { ...prev };
+      delete next[electionId];
+      return next;
+    });
+
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -105,19 +139,58 @@ export default function ElectionManager({ displayName, initialElections }: Elect
       });
       const result = (await response.json()) as {
         error?: string;
+        errors?: string[];
         message?: string;
         count?: number;
         duplicatesIgnored?: number;
       };
+
       if (!response.ok) {
+        setCsvValidationErrors((prev) => ({
+          ...prev,
+          [electionId]: {
+            error: result.error || "Failed to upload class eligibility CSV.",
+            errors: result.errors,
+          },
+        }));
         throw new Error(result.error || "Failed to upload class eligibility CSV.");
       }
-      setMessage(result.message || `Uploaded ${result.count} eligible voters.`);
+
+      const successMsg = result.message || `Uploaded and verified ${result.count} eligible voters.`;
+      setCsvSuccesses((prev) => ({ ...prev, [electionId]: successMsg }));
+      setMessage(successMsg);
       await loadElections();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploadingId(null);
+    }
+  }
+
+  async function handleQuickAssignTrustees(electionId: string) {
+    if (activeAuthorities.length < 3) {
+      setError(`Cannot assign trustees: Only ${activeAuthorities.length} active authority account(s) available. At least 3 active authorities required.`);
+      return;
+    }
+    setPendingId(`trustees-${electionId}`);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`/api/admin/elections/${electionId}/trustees`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          authorityIds: activeAuthorities.slice(0, 3).map((a) => a.id),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to assign trustees.");
+      setMessage(data.message || "Assigned 3 active authority trustees (Slots 1, 2, 3).");
+      await loadElections();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error assigning trustees.");
+    } finally {
+      setPendingId("");
     }
   }
 
@@ -299,7 +372,9 @@ export default function ElectionManager({ displayName, initialElections }: Elect
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
         <div className="elections-topbar-right">
-          <Link className="overview-link" href="/"><ArrowLeft size={15} /> Overview</Link>
+          <Link className="overview-link" href="/" prefetch={true}><ArrowLeft size={15} /> Overview</Link>
+          <Link className="overview-link" href="/results" prefetch={true}>Ledger</Link>
+          <Link className="overview-link" href="/audit" prefetch={true}>Audit</Link>
           <span className="topbar-divider" />
           <span className="elections-user"><span className="avatar">{initials}</span><span>{displayName}</span></span>
           <button className="icon-button" title="Sign out" aria-label="Sign out" onClick={signOut}><LogOut size={16} /></button>
@@ -403,10 +478,31 @@ export default function ElectionManager({ displayName, initialElections }: Elect
           <div className="election-record-list">
             {elections.map((election) => {
               const transition = nextAction[election.status];
-              const canAdvance = election.status !== "RESULTS_PUBLISHED" && (election.status !== "DRAFT" || election.candidates.length >= 2);
               const voteCount = election.votesCount ?? 0;
               const isVoted = voteCount > 0;
               const isActive = election.status === "ACTIVE";
+              const candidateCount = election.candidates.length;
+              const eligibleCount = election.eligibleVotersCount ?? 0;
+              const trusteeCount = election.trusteesCount ?? (election.trustees ? election.trustees.length : 0);
+
+              let canAdvance = false;
+              let advanceMissingReason = "";
+
+              if (election.status === "DRAFT") {
+                const missingSteps: string[] = [];
+                if (candidateCount < 2) missingSteps.push("At least 2 candidates");
+                if (eligibleCount === 0) missingSteps.push("Voter CSV upload");
+                if (trusteeCount !== 3) missingSteps.push(`3 Trustees (${trusteeCount}/3 assigned)`);
+
+                if (missingSteps.length === 0) {
+                  canAdvance = true;
+                } else {
+                  canAdvance = false;
+                  advanceMissingReason = `Required before locking: ${missingSteps.join(", ")}`;
+                }
+              } else if (election.status !== "RESULTS_PUBLISHED") {
+                canAdvance = true;
+              }
 
               return (
                 <article className="election-record" key={election.id}>
@@ -438,11 +534,56 @@ export default function ElectionManager({ displayName, initialElections }: Elect
                       <strong>{election.candidates.length.toString().padStart(2, "0")}</strong>
                     </span>
                     <span>
+                      <UsersRound size={14} />
+                      <span>ELIGIBLE VOTERS</span>
+                      <strong>{eligibleCount.toString()}</strong>
+                    </span>
+                    <span>
+                      <LockKeyhole size={14} />
+                      <span>TRUSTEES</span>
+                      <strong>{`${trusteeCount}/3`}</strong>
+                    </span>
+                    <span>
                       <Vote size={14} />
                       <span>VOTES CAST</span>
                       <strong>{voteCount.toString()}</strong>
                     </span>
                   </div>
+
+                  {/* Explicit Election Setup Order Stepper for DRAFT status */}
+                  {election.status === "DRAFT" && (
+                    <div style={{ marginTop: "1rem", padding: "0.85rem", background: "rgba(255, 255, 255, 0.02)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                      <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: "0.6rem" }}>
+                        Intended Setup Order (Must Complete Before Locking)
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: "0.5rem", fontSize: "0.8rem" }}>
+                        <div style={{ padding: "0.5rem", borderRadius: "6px", background: candidateCount >= 2 ? "rgba(16, 185, 129, 0.08)" : "rgba(245, 158, 11, 0.08)", border: candidateCount >= 2 ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid rgba(245, 158, 11, 0.2)" }}>
+                          <div style={{ fontWeight: 600, color: candidateCount >= 2 ? "#10b981" : "#f59e0b" }}>
+                            {candidateCount >= 2 ? "✓ 1. Add Candidates" : "1. Add Candidates"}
+                          </div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.725rem" }}>{candidateCount} configured (min 2)</div>
+                        </div>
+                        <div style={{ padding: "0.5rem", borderRadius: "6px", background: eligibleCount > 0 ? "rgba(16, 185, 129, 0.08)" : "rgba(245, 158, 11, 0.08)", border: eligibleCount > 0 ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid rgba(245, 158, 11, 0.2)" }}>
+                          <div style={{ fontWeight: 600, color: eligibleCount > 0 ? "#10b981" : "#f59e0b" }}>
+                            {eligibleCount > 0 ? "✓ 2. Upload Voter CSV" : "2. Upload Voter CSV"}
+                          </div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.725rem" }}>{eligibleCount > 0 ? `${eligibleCount} enrolled` : "Pending upload"}</div>
+                        </div>
+                        <div style={{ padding: "0.5rem", borderRadius: "6px", background: trusteeCount === 3 ? "rgba(16, 185, 129, 0.08)" : "rgba(245, 158, 11, 0.08)", border: trusteeCount === 3 ? "1px solid rgba(16, 185, 129, 0.2)" : "1px solid rgba(245, 158, 11, 0.2)" }}>
+                          <div style={{ fontWeight: 600, color: trusteeCount === 3 ? "#10b981" : "#f59e0b" }}>
+                            {trusteeCount === 3 ? "✓ 3. Assign 3 Trustees" : "3. Assign 3 Trustees"}
+                          </div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.725rem" }}>{trusteeCount}/3 assigned</div>
+                        </div>
+                        <div style={{ padding: "0.5rem", borderRadius: "6px", background: canAdvance ? "rgba(59, 130, 246, 0.08)" : "rgba(255, 255, 255, 0.03)", border: canAdvance ? "1px solid rgba(59, 130, 246, 0.2)" : "1px solid rgba(255, 255, 255, 0.06)" }}>
+                          <div style={{ fontWeight: 600, color: canAdvance ? "#60a5fa" : "#94a3b8" }}>
+                            4. Lock &amp; Transition
+                          </div>
+                          <div style={{ color: "#94a3b8", fontSize: "0.725rem" }}>{canAdvance ? "Ready to lock" : "Complete steps 1–3"}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="record-candidate-heading">
                     <strong>Candidate list</strong>
@@ -480,32 +621,142 @@ export default function ElectionManager({ displayName, initialElections }: Elect
                     </form>
                   )}
 
+                  {/* Voter Eligibility CSV Upload Section */}
                   <div style={{ marginTop: "1rem", padding: "0.85rem", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                        <UsersRound size={15} style={{ color: "#10b981" }} />
-                        <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>Official Class Voter List (CSV)</span>
+                        <UsersRound size={16} style={{ color: eligibleCount > 0 ? "#10b981" : "#f59e0b" }} />
+                        <div>
+                          <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>Official Class Voter List (CSV)</span>
+                          <span style={{ display: "block", fontSize: "0.75rem", color: eligibleCount > 0 ? "#10b981" : "#94a3b8" }}>
+                            {eligibleCount > 0
+                              ? `✓ ${eligibleCount} verified student(s) currently registered as eligible`
+                              : "No voter roster uploaded yet (required before locking)"}
+                          </span>
+                        </div>
                       </div>
-                      <label className="secondary-button" style={{ fontSize: "0.75rem", padding: "0.3rem 0.65rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-                        <Upload size={13} />
-                        <span>{uploadingId === election.id ? "Uploading..." : "Upload Class CSV"}</span>
-                        <input
-                          type="file"
-                          accept=".csv,text/csv"
-                          style={{ display: "none" }}
-                          disabled={uploadingId === election.id}
-                          onChange={(e) => void handleCsvUpload(election.id, e.target.files?.[0])}
-                        />
-                      </label>
+                      {election.status === "DRAFT" ? (
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                          <label className="secondary-button" style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
+                            <Upload size={13} />
+                            <span>{uploadingId === election.id ? "Uploading & Validating..." : (eligibleCount > 0 ? "Replace Voter CSV" : "Upload Class CSV")}</span>
+                            <input
+                              type="file"
+                              accept=".csv,text/csv"
+                              style={{ display: "none" }}
+                              disabled={uploadingId === election.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  setSelectedCsvFiles((prev) => ({ ...prev, [election.id]: file.name }));
+                                  void handleCsvUpload(election.id, file);
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: "0.75rem", color: "#94a3b8", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+                          <LockKeyhole size={12} /> Eligibility Locked ({eligibleCount} voters)
+                        </span>
+                      )}
                     </div>
+
+                    {/* Display selected file name */}
+                    {selectedCsvFiles[election.id] && (
+                      <div style={{ marginTop: "0.5rem", fontSize: "0.75rem", color: "#38bdf8", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <span>Selected file:</span>
+                        <code style={{ background: "rgba(56, 189, 248, 0.1)", padding: "2px 6px", borderRadius: "4px" }}>
+                          {selectedCsvFiles[election.id]}
+                        </code>
+                      </div>
+                    )}
+
+                    {/* Display row-level validation errors if upload failed */}
+                    {csvValidationErrors[election.id] && (
+                      <div style={{ marginTop: "0.6rem", padding: "0.6rem", background: "rgba(239, 68, 68, 0.1)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: "6px" }}>
+                        <div style={{ color: "#ef4444", fontSize: "0.775rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                          <AlertTriangle size={14} /> {csvValidationErrors[election.id].error}
+                        </div>
+                        {csvValidationErrors[election.id].errors && csvValidationErrors[election.id].errors!.length > 0 && (
+                          <ul style={{ margin: "0.4rem 0 0 1.2rem", padding: 0, fontSize: "0.725rem", color: "#fca5a5", maxHeight: "120px", overflowY: "auto" }}>
+                            {csvValidationErrors[election.id].errors!.map((err, i) => (
+                              <li key={i}>{err}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Display upload success banner */}
+                    {csvSuccesses[election.id] && (
+                      <div style={{ marginTop: "0.5rem", color: "#10b981", fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "0.35rem" }}>
+                        <Check size={14} /> {csvSuccesses[election.id]}
+                      </div>
+                    )}
+
                     <p style={{ fontSize: "0.75rem", color: "var(--muted, #888)", margin: "0.4rem 0 0" }}>
                       CSV format: <code>student_id,email</code>. Only officially enrolled <code>@psgtech.ac.in</code> students are eligible.
                     </p>
                   </div>
 
+                  {/* 2-of-3 Threshold Authority Trustees Configuration Section */}
+                  <div style={{ marginTop: "0.75rem", padding: "0.85rem", background: "rgba(255, 255, 255, 0.03)", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <ShieldCheck size={16} style={{ color: trusteeCount === 3 ? "#10b981" : "#f59e0b" }} />
+                        <div>
+                          <span style={{ fontSize: "0.875rem", fontWeight: 600 }}>2-of-3 Threshold Election Trustees</span>
+                          <span style={{ display: "block", fontSize: "0.75rem", color: trusteeCount === 3 ? "#10b981" : "#94a3b8" }}>
+                            {trusteeCount === 3
+                              ? `✓ Exactly 3 trustees assigned (Slots 1, 2, 3)`
+                              : `${trusteeCount}/3 assigned — 3 distinct active trustees required before locking`}
+                          </span>
+                        </div>
+                      </div>
+                      {election.status === "DRAFT" && (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          style={{ fontSize: "0.75rem", padding: "0.35rem 0.75rem" }}
+                          disabled={pendingId === `trustees-${election.id}` || activeAuthorities.length < 3}
+                          onClick={() => void handleQuickAssignTrustees(election.id)}
+                          title={activeAuthorities.length < 3 ? "Need at least 3 active authorities in the system" : "Assign first 3 active authorities to Slots 1, 2, 3"}
+                        >
+                          {pendingId === `trustees-${election.id}` ? "Assigning..." : "Auto-Assign 3 Active Trustees"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* List of currently assigned trustees */}
+                    {election.trustees && election.trustees.length > 0 && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.5rem", marginTop: "0.6rem" }}>
+                        {election.trustees.map((t) => (
+                          <div key={t.id} style={{ background: "rgba(255, 255, 255, 0.04)", padding: "0.4rem 0.6rem", borderRadius: "6px", fontSize: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span><strong>Slot {t.slotIndex}:</strong> {t.authority.name}</span>
+                            <code style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{t.authority.email}</code>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {election.status === "DRAFT" && activeAuthorities.length < 3 && (
+                      <p style={{ fontSize: "0.75rem", color: "#f59e0b", margin: "0.4rem 0 0" }}>
+                        ⚠️ Only {activeAuthorities.length} active authority account(s) available in global pool. Please invite and activate at least 3 authorities.
+                      </p>
+                    )}
+                  </div>
+
                   <div className="record-footer" style={{ flexWrap: "wrap", gap: "0.75rem" }}>
                     <span>{statusCopy[election.status] ?? "Lifecycle status is being managed."}</span>
-                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                    <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                      {/* Advance Requirement Warning */}
+                      {advanceMissingReason && (
+                        <span style={{ fontSize: "0.75rem", color: "#f59e0b", background: "rgba(245, 158, 11, 0.1)", border: "1px solid rgba(245, 158, 11, 0.25)", padding: "0.25rem 0.5rem", borderRadius: "4px" }}>
+                          ⚠️ {advanceMissingReason}
+                        </span>
+                      )}
+
                       {/* Close Election Early action button */}
                       {isActive && (
                         <button

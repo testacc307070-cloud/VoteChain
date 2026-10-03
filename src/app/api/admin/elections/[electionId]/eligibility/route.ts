@@ -68,6 +68,13 @@ export async function POST(
       );
     }
 
+    if (election.status !== "DRAFT") {
+      return NextResponse.json(
+        { error: "Eligibility register is locked. Voter eligibility can only be configured while the election is in DRAFT status." },
+        { status: 409 }
+      );
+    }
+
     let csvContent = "";
     const contentType = request.headers.get("content-type") || "";
     if (contentType.includes("multipart/form-data")) {

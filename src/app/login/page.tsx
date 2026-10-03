@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { ArrowRight, Fingerprint, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import PasswordInput from "@/frontend/components/password-input";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,7 +75,7 @@ export default function LoginPage() {
           <span className="brand-mark"><span /><span /><span /></span>
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
-        <div className="login-aside-copy"><span className="login-overline">CAMPUS ELECTIONS / PHASE 1</span><h1>Trust begins<br />with a clear<br /><em>process.</em></h1><p>Cryptographically verified campus election platform for PSG College of Technology.</p></div>
+        <div className="login-aside-copy"><span className="login-overline">CAMPUS ELECTIONS / VERIFIABLE VOTING</span><h1>Trust begins<br />with a clear<br /><em>process.</em></h1><p>Cryptographically verified campus election platform for PSG College of Technology.</p></div>
         <div className="login-aside-foot"><Fingerprint size={18} /><span>Identity and ballot data are designed to remain separate.</span></div>
       </section>
       <section className="login-main">
@@ -92,7 +93,7 @@ export default function LoginPage() {
                 Forgot password?
               </Link>
             </div>
-            <input id="password" autoComplete="current-password" type="password" required maxLength={1024} value={password} onChange={(event) => setPassword(event.target.value)} />
+            <PasswordInput id="password" autoComplete="current-password" required maxLength={1024} value={password} onChange={(event) => setPassword(event.target.value)} />
             {error && <p className="login-error" role="alert">{error}</p>}
             {unverifiedEmail && (
               <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>

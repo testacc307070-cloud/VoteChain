@@ -12,7 +12,13 @@ export default async function ElectionsPage() {
     orderBy: [{ updatedAt: "desc" }],
     include: {
       candidates: { orderBy: { sortOrder: "asc" } },
-      _count: { select: { votes: true } },
+      trustees: {
+        include: {
+          authority: { select: { id: true, name: true, email: true, status: true } },
+        },
+        orderBy: { slotIndex: "asc" },
+      },
+      _count: { select: { votes: true, eligibleVoters: true, trustees: true } },
     },
   });
   const initialElections = elections.map((election) => ({
@@ -20,6 +26,8 @@ export default async function ElectionsPage() {
     startTime: election.startTime.toISOString(),
     endTime: election.endTime.toISOString(),
     votesCount: election._count.votes,
+    eligibleVotersCount: election._count.eligibleVoters,
+    trusteesCount: election._count.trustees,
   }));
 
   return <ElectionManager displayName={user.name} initialElections={initialElections} />;

@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Shield, Check, X, Lock, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Shield, Check, X, Lock, CheckCircle2, AlertTriangle, ArrowRight, Eye, EyeOff } from "lucide-react";
 
 function AuthoritySetupInner() {
   const searchParams = useSearchParams();
@@ -16,6 +16,8 @@ function AuthoritySetupInner() {
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -205,13 +207,13 @@ function AuthoritySetupInner() {
           </label>
           <div style={{ position: "relative" }}>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter strong password"
               style={{
                 width: "100%",
-                padding: "10px 12px",
+                padding: "10px 42px 10px 12px",
                 backgroundColor: "#090d16",
                 border: "1px solid #1e293b",
                 borderRadius: 8,
@@ -220,6 +222,28 @@ function AuthoritySetupInner() {
               }}
               required
             />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowPassword((p) => !p)}
+              style={{
+                position: "absolute",
+                right: "10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "#94a3b8",
+                display: "grid",
+                placeItems: "center",
+                padding: 4,
+              }}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
           </div>
         </div>
 
@@ -227,22 +251,46 @@ function AuthoritySetupInner() {
           <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
             Confirm Password
           </label>
-          <input
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Re-enter password"
-            style={{
-              width: "100%",
-              padding: "10px 12px",
-              backgroundColor: "#090d16",
-              border: "1px solid #1e293b",
-              borderRadius: 8,
-              color: "#ffffff",
-              fontSize: "0.9rem",
-            }}
-            required
-          />
+          <div style={{ position: "relative" }}>
+            <input
+              type={showConfirmPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter password"
+              style={{
+                width: "100%",
+                padding: "10px 42px 10px 12px",
+                backgroundColor: "#090d16",
+                border: "1px solid #1e293b",
+                borderRadius: 8,
+                color: "#ffffff",
+                fontSize: "0.9rem",
+              }}
+              required
+            />
+            <button
+              type="button"
+              tabIndex={-1}
+              onClick={() => setShowConfirmPassword((p) => !p)}
+              style={{
+                position: "absolute",
+                right: "10px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                color: "#94a3b8",
+                display: "grid",
+                placeItems: "center",
+                padding: 4,
+              }}
+              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+              title={showConfirmPassword ? "Hide password" : "Show password"}
+            >
+              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
 
         {/* Policy Checklist */}

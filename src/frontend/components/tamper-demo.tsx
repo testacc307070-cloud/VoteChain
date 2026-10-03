@@ -35,7 +35,7 @@ export default function TamperDemo({ blocks }: { blocks: Block[] }) {
     <div className="election-record" style={{ marginTop: "2rem", border: "1px solid var(--border-color, #333)" }}>
       <div className="record-heading">
         <div>
-          <span className="record-id">PHASE 10 SECURITY MODULE</span>
+          <span className="record-id">CRYPTOGRAPHIC INTEGRITY MONITOR</span>
           <h3 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <ShieldAlert size={18} color="#eab308" />
             Controlled Tamper Detection Demonstration

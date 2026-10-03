@@ -31,6 +31,19 @@ export default async function AuditPage() {
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          {user?.role === "ADMIN" && (
+            <nav style={{ display: "flex", gap: "14px", alignItems: "center", marginRight: "0.5rem" }}>
+              <Link href="/" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Overview
+              </Link>
+              <Link href="/elections" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Elections
+              </Link>
+              <Link href="/results" prefetch={true} style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}>
+                Ledger
+              </Link>
+            </nav>
+          )}
           {user ? (
             <form action="/api/auth/logout" method="post">
               <button className="portal-signout" type="submit">Sign out</button>
@@ -121,18 +134,36 @@ export default async function AuditPage() {
             ) : (
               <div style={{ display: "grid", gap: "0.75rem" }}>
                 {dbAuditLogs.map((log) => (
-                  <div key={log.id} className="candidate-readonly" style={{ justifyContent: "space-between" }}>
-                    <div>
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                        <FileText size={14} color="#38bdf8" />
-                        <strong style={{ fontSize: "0.85rem" }}>{log.eventType}</strong>
-                        <span style={{ fontSize: "0.75rem", color: "var(--muted, #888)" }}>Actor: {log.actorReference}</span>
+                  <div
+                    key={log.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      gap: "1rem",
+                      padding: "12px 16px",
+                      background: "#ffffff",
+                      border: "1px solid #edf0ec",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
+                        <FileText size={15} color="#347c5b" />
+                        <strong style={{ fontSize: "12px", color: "#25332d" }}>{log.eventType}</strong>
+                        <span style={{ fontSize: "11px", color: "#84938a", fontFamily: "var(--font-data)" }}>
+                          Actor: {log.actorReference}
+                        </span>
                       </div>
-                      <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.8rem" }}>{log.details}</p>
+                      {log.details && (
+                        <p style={{ margin: "0.4rem 0 0 0", fontSize: "11px", color: "#66776e", lineHeight: 1.5, wordBreak: "break-word" }}>
+                          {log.details}
+                        </p>
+                      )}
                     </div>
-                    <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--muted, #888)" }}>
-                      <div>{new Date(log.timestamp).toLocaleTimeString()}</div>
-                      <code>{log.eventHash.slice(0, 16)}...</code>
+                    <div style={{ textAlign: "right", fontSize: "10px", color: "#88968e", flexShrink: 0 }}>
+                      <div style={{ fontWeight: 500 }}>{new Date(log.timestamp).toLocaleTimeString()}</div>
+                      <code style={{ fontSize: "9px", color: "#54645b" }}>{log.eventHash.slice(0, 16)}...</code>
                     </div>
                   </div>
                 ))}

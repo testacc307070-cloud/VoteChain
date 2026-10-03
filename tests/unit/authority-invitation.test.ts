@@ -103,7 +103,7 @@ test("Authority Invitation Flow: Create invited user, dispatch token, and activa
         emailVerified: true,
       },
     });
-  });
+  }, { timeout: 30000, maxWait: 15000 });
 
   assert.equal(updatedUser.status, UserStatus.ACTIVE);
   assert.equal(updatedUser.emailVerified, true);

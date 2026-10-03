@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +16,7 @@ import {
   ClipboardList,
   Copy,
   Eye,
+  EyeOff,
   Fingerprint,
   KeyRound,
   LayoutDashboard,
@@ -153,6 +154,66 @@ export default function DashboardClient({
   const [observerCodeResult, setObserverCodeResult] = useState<string>("");
   const [observerCodeLoading, setObserverCodeLoading] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+
+  // Demo Reset Modal state
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetInProgress, setResetInProgress] = useState(false);
+
+  // Search & Command Palette state
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Notifications Popover state
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
+  // Voter enrollment password visibility
+  const [showEnrollPassword, setShowEnrollPassword] = useState(false);
+
+  // Global keyboard shortcuts (Cmd+K / Ctrl+K and Escape)
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchModalOpen((open) => !open);
+      } else if (e.key === "Escape") {
+        setSearchModalOpen(false);
+        setNotificationsOpen(false);
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Check URL query parameters for direct tab navigation (e.g. ?tab=authorities)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get("tab");
+      if (tab === "authorities" || tab === "Authorities") {
+        setActiveNav("Authorities");
+      } else if (tab === "voters" || tab === "Voters") {
+        setActiveNav("Voters");
+      } else if (tab === "overview" || tab === "Overview") {
+        setActiveNav("Overview");
+      }
+    }
+  }, []);
+
+  // Close notifications popover on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    }
+    if (notificationsOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notificationsOpen]);
 
   async function handleGenerateObserverCode(electionId: string, electionName: string) {
     setObserverModalElection({ id: electionId, name: electionName });
@@ -311,6 +372,52 @@ export default function DashboardClient({
     }
   }
 
+  async function handleToggleAuthorityStatus(authorityId: string, currentStatus: string, name: string) {
+    const nextStatus = currentStatus === "SUSPENDED" ? "ACTIVE" : "SUSPENDED";
+    const actionLabel = nextStatus === "SUSPENDED" ? "suspend" : "reactivate";
+    if (!confirm(`Are you sure you want to ${actionLabel} authority trustee "${name}"?`)) return;
+    setGlobalError("");
+    setGlobalMessage("");
+    try {
+      const res = await fetch(`/api/admin/authorities/${authorityId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${actionLabel} authority.`);
+      setGlobalMessage(data.message || `Authority "${name}" status updated to ${nextStatus}.`);
+      await reloadAuthorities();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : `Error updating authority status.`);
+    }
+  }
+
+  async function executeDemoReset() {
+    if (resetConfirmText !== "RESET") return;
+    setResetInProgress(true);
+    setGlobalError("");
+    setGlobalMessage("");
+    try {
+      const res = await fetch("/api/admin/demo/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "RESET" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to reset demo data.");
+      setGlobalMessage(data.message || "Clean-slate demo reset completed successfully.");
+      setShowResetModal(false);
+      setResetConfirmText("");
+      await reloadAuthorities();
+      router.refresh();
+    } catch (err) {
+      setGlobalError(err instanceof Error ? err.message : "Error executing demo reset.");
+    } finally {
+      setResetInProgress(false);
+    }
+  }
+
   async function executeEarlyClose() {
     if (!closingElection) return;
     setActionInProgress(true);
@@ -350,6 +457,58 @@ export default function DashboardClient({
     }
   }
 
+  const systemNotifications = [
+    ...(metrics.activeElection
+      ? [
+          {
+            id: "notif-active-election",
+            title: `Live Election: ${metrics.activeElection.name}`,
+            detail: `${metrics.activeElection.votesCount} ballots verified on Sepolia ledger. Closes ${new Date(metrics.activeElection.endTime).toLocaleDateString()}.`,
+            icon: Vote,
+            color: "#286b50",
+            bg: "#eaf5ee",
+            action: () => router.push("/elections"),
+            time: "Live Election",
+          },
+        ]
+      : []),
+    {
+      id: "notif-threshold-status",
+      title: "2-of-3 Threshold Quorum",
+      detail:
+        authorities.length >= 3
+          ? "All 3 designated authorities configured for Shamir key recovery."
+          : `${authorities.length} of 3 trustees registered. Exactly 3 required before election activation.`,
+      icon: ShieldCheck,
+      color: authorities.length >= 3 ? "#286b50" : "#d97706",
+      bg: authorities.length >= 3 ? "#eaf5ee" : "#fef3c7",
+      action: () => setActiveNav("Authorities"),
+      time: "Authority Pool",
+    },
+    ...recentActivities.slice(0, 3).map((act, idx) => ({
+      id: `notif-activity-${idx}-${act.title}`,
+      title: act.title,
+      detail: act.detail,
+      icon: ClipboardList,
+      color: act.color === "green" ? "#286b50" : "#2563eb",
+      bg: act.color === "green" ? "#eaf5ee" : "#eff6ff",
+      action: () => router.push("/audit"),
+      time: act.time,
+    })),
+    {
+      id: "notif-blockchain",
+      title: "Ethereum Sepolia Ledger",
+      detail: "Decentralized ledger synchronization active with zero-knowledge verification.",
+      icon: Blocks,
+      color: "#2563eb",
+      bg: "#eff6ff",
+      action: () => router.push("/results"),
+      time: "Sepolia Network",
+    },
+  ];
+
+  const unreadCount = systemNotifications.filter((n) => !readNotificationIds.includes(n.id)).length;
+
   return (
     <main className="app-shell">
       <aside className={`sidebar ${mobileNavOpen ? "sidebar-open" : ""}`}>
@@ -377,6 +536,7 @@ export default function DashboardClient({
                 key={label}
                 className={className}
                 href={href}
+                prefetch={true}
                 onClick={() => {
                   setActiveNav(label);
                   setMobileNavOpen(false);
@@ -415,8 +575,86 @@ export default function DashboardClient({
           </button>
           <div className="breadcrumbs"><span>Workspace</span><span className="crumb-slash">/</span><strong>{activeNav}</strong></div>
           <div className="topbar-actions">
-            <button className="search-button" aria-label="Search"><Search size={16} /><span>Search</span><kbd>⌘ K</kbd></button>
-            <button className="icon-button notification-button" title="Notifications" aria-label="Notifications"><Bell size={18} /><i /></button>
+            <button
+              className="search-button"
+              aria-label="Search system"
+              onClick={() => setSearchModalOpen(true)}
+            >
+              <Search size={16} />
+              <span>Search</span>
+              <kbd>⌘ K</kbd>
+            </button>
+            <div className="notifications-popover-container" ref={notificationsRef}>
+              <button
+                className="icon-button notification-button"
+                title="Notifications"
+                aria-label="Notifications"
+                onClick={() => setNotificationsOpen((prev) => !prev)}
+              >
+                <Bell size={18} />
+                {unreadCount > 0 && <i />}
+              </button>
+              {notificationsOpen && (
+                <div className="notifications-popover" role="dialog" aria-label="System notifications">
+                  <div className="notifications-header">
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <strong>Notifications</strong>
+                      {unreadCount > 0 && (
+                        <span className="results-meta-badge results-badge-success" style={{ fontSize: "8px" }}>
+                          {unreadCount} new
+                        </span>
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        style={{ fontSize: "10px", color: "var(--green)" }}
+                        onClick={() => setReadNotificationIds(systemNotifications.map((n) => n.id))}
+                      >
+                        Mark all as read
+                      </button>
+                    )}
+                  </div>
+                  <div className="notifications-list">
+                    {systemNotifications.length === 0 ? (
+                      <div style={{ padding: "16px", textAlign: "center", color: "#87938b", fontSize: "11px" }}>
+                        No new notifications
+                      </div>
+                    ) : (
+                      systemNotifications.map((notif) => {
+                        const IconComponent = notif.icon;
+                        const isRead = readNotificationIds.includes(notif.id);
+                        return (
+                          <button
+                            key={notif.id}
+                            type="button"
+                            className="notification-item"
+                            style={{ opacity: isRead ? 0.7 : 1 }}
+                            onClick={() => {
+                              if (!isRead) {
+                                setReadNotificationIds((prev) => [...prev, notif.id]);
+                              }
+                              setNotificationsOpen(false);
+                              notif.action();
+                            }}
+                          >
+                            <div className="notification-icon-wrap" style={{ background: notif.bg, color: notif.color }}>
+                              <IconComponent size={15} />
+                            </div>
+                            <div className="notification-info">
+                              <strong>{notif.title}</strong>
+                              <p>{notif.detail}</p>
+                              <time>{notif.time}</time>
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <span className="topbar-divider" />
             <div className="topbar-date"><span className="live-dot" /> LIVE SYSTEM</div>
           </div>
@@ -619,6 +857,21 @@ export default function DashboardClient({
                               <ShieldCheck size={12} /> Key Share Holder
                             </span>
                           )}
+                          {auth.status !== "INVITED" && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "0.2rem 0.5rem",
+                                borderColor: auth.status === "SUSPENDED" ? "#10b981" : "#f59e0b",
+                                color: auth.status === "SUSPENDED" ? "#10b981" : "#f59e0b",
+                              }}
+                              onClick={() => handleToggleAuthorityStatus(auth.id, auth.status, auth.name)}
+                            >
+                              {auth.status === "SUSPENDED" ? "Reactivate" : "Suspend"}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="secondary-button"
@@ -683,7 +936,36 @@ export default function DashboardClient({
                       </label>
                       <label className="field-block">
                         <span>Password (min 8 chars)</span>
-                        <input name="password" type="password" required minLength={8} placeholder="••••••••••••" />
+                        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                          <input
+                            name="password"
+                            type={showEnrollPassword ? "text" : "password"}
+                            required
+                            minLength={8}
+                            placeholder="••••••••••••"
+                            style={{ paddingRight: "2.5rem" }}
+                          />
+                          <button
+                            type="button"
+                            tabIndex={-1}
+                            onClick={() => setShowEnrollPassword((prev) => !prev)}
+                            style={{
+                              position: "absolute",
+                              right: "0.5rem",
+                              top: "50%",
+                              transform: "translateY(-50%)",
+                              background: "transparent",
+                              border: "none",
+                              cursor: "pointer",
+                              color: "#85918b",
+                              padding: "4px",
+                            }}
+                            aria-label={showEnrollPassword ? "Hide password" : "Show password"}
+                            title={showEnrollPassword ? "Hide password" : "Show password"}
+                          >
+                            {showEnrollPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
                       </label>
                     </div>
                     <label className="field-block">
@@ -988,6 +1270,31 @@ export default function DashboardClient({
                 </section>
               </div>
 
+              {/* Clean-Slate Classroom Demo Reset Panel */}
+              <section style={{ marginTop: "2rem", padding: "1.25rem", borderRadius: "8px", border: "1px solid rgba(239, 68, 68, 0.25)", background: "rgba(239, 68, 68, 0.03)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", color: "#ef4444", fontWeight: 700, fontSize: "0.95rem" }}>
+                      <AlertTriangle size={18} /> Clean-Slate Classroom Demo Reset
+                    </div>
+                    <p style={{ margin: "0.35rem 0 0", fontSize: "0.8rem", color: "#94a3b8", maxWidth: "640px", lineHeight: 1.5 }}>
+                      Restores application database to a fresh state for classroom demonstrations (clears demo elections, test voters, test authorities, votes, and tokens). The admin account and schema are preserved. Blockchain commitments on Sepolia remain immutable.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ borderColor: "#ef4444", color: "#ef4444", fontSize: "0.8rem", padding: "0.4rem 0.85rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}
+                    onClick={() => {
+                      setShowResetModal(true);
+                      setResetConfirmText("");
+                    }}
+                  >
+                    <Trash2 size={14} /> Reset Demo Data
+                  </button>
+                </div>
+              </section>
+
               <footer className="page-footer">
                 <span>VOTECHAIN <i>·</i> FULL-STACK ONLINE VOTING PROTOTYPE</span>
                 <span>Privacy-Preserving Blockchain Electronic Voting System <ArrowDownRight size={13} /></span>
@@ -1268,6 +1575,292 @@ export default function DashboardClient({
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Clean-Slate Demo Reset Confirmation */}
+      {showResetModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.8)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "var(--paper, #18221e)",
+              border: "1px solid #ef4444",
+              borderRadius: "8px",
+              maxWidth: "520px",
+              width: "100%",
+              padding: "1.5rem",
+              boxShadow: "0 25px 30px -5px rgba(0, 0, 0, 0.7)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", color: "#ef4444" }}>
+              <AlertTriangle size={22} />
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700 }}>Confirm Clean-Slate Demo Reset</h3>
+            </div>
+            <p style={{ margin: "1rem 0 0.5rem", fontSize: "0.875rem", lineHeight: 1.5 }}>
+              This operation resets all demo election data to return VoteChain to a brand-new installation state for classroom demonstrations.
+            </p>
+
+            <div
+              style={{
+                background: "rgba(239, 68, 68, 0.08)",
+                border: "1px solid rgba(239, 68, 68, 0.25)",
+                borderRadius: "6px",
+                padding: "0.75rem",
+                margin: "0.75rem 0",
+                fontSize: "0.8rem",
+              }}
+            >
+              <strong style={{ color: "#ef4444" }}>Data Cleared:</strong>
+              <ul style={{ margin: "0.3rem 0 0.6rem", paddingLeft: "1.2rem", color: "#fca5a5" }}>
+                <li>All demo elections, candidates, and voter eligibility rosters</li>
+                <li>All submitted votes, ballot ciphertexts, and local receipts</li>
+                <li>All test authorities and test student voters</li>
+                <li>All verification tokens, invitations, and password reset tokens</li>
+              </ul>
+              <strong style={{ color: "#10b981" }}>Preserved:</strong>
+              <ul style={{ margin: "0.3rem 0 0", paddingLeft: "1.2rem", color: "#6ee7b7" }}>
+                <li>Admin account (<code>{displayName}</code>)</li>
+                <li>Database schema &amp; Prisma migrations</li>
+                <li>Sepolia Ethereum smart contract (0x7339F8B088A2835F26e158c9F96690395D80264D) is an immutable distributed ledger and remains permanently on-chain</li>
+              </ul>
+            </div>
+
+            <div style={{ margin: "1rem 0 0.5rem" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", marginBottom: "0.35rem" }}>
+                Type <strong>RESET</strong> in capital letters to confirm:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value.trim())}
+                placeholder="RESET"
+                style={{
+                  width: "100%",
+                  padding: "0.5rem 0.75rem",
+                  background: "#090d16",
+                  border: "1px solid #334155",
+                  borderRadius: "6px",
+                  color: "#f1f5f9",
+                  fontSize: "0.9rem",
+                  fontFamily: "monospace",
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.75rem", marginTop: "1.5rem" }}>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={resetInProgress}
+                onClick={() => {
+                  setShowResetModal(false);
+                  setResetConfirmText("");
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                style={{
+                  background: resetConfirmText === "RESET" ? "#dc2626" : "#475569",
+                  borderColor: resetConfirmText === "RESET" ? "#dc2626" : "#475569",
+                  cursor: resetConfirmText === "RESET" ? "pointer" : "not-allowed",
+                  opacity: resetConfirmText === "RESET" ? 1 : 0.5,
+                }}
+                disabled={resetConfirmText !== "RESET" || resetInProgress}
+                onClick={() => void executeDemoReset()}
+              >
+                {resetInProgress ? "Resetting..." : "Confirm Demo Reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Command Palette & Universal Search Modal */}
+      {searchModalOpen && (
+        <div
+          className="search-modal-backdrop"
+          onClick={() => setSearchModalOpen(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quick search and command palette"
+        >
+          <div className="search-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="search-modal-header">
+              <Search size={18} color="#65756c" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search elections, authorities, voters, or navigation..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                style={{ width: "24px", height: "24px" }}
+                onClick={() => setSearchModalOpen(false)}
+                aria-label="Close search"
+              >
+                <X size={15} />
+              </button>
+            </div>
+
+            <div className="search-modal-results">
+              {(() => {
+                const q = searchQuery.toLowerCase().trim();
+                const navMatches = [
+                  { label: "Overview Dashboard", desc: "Live election metrics & workspace status", action: () => { setActiveNav("Overview"); setSearchModalOpen(false); }, icon: LayoutDashboard },
+                  { label: "Authority Trustees", desc: "2-of-3 threshold Shamir key management", action: () => { setActiveNav("Authorities"); setSearchModalOpen(false); }, icon: ShieldCheck },
+                  { label: "Elections Manager", desc: "Manage elections, candidates, eligibility CSV", action: () => { router.push("/elections"); setSearchModalOpen(false); }, icon: Vote },
+                  { label: "Voters Directory", desc: "View enrolled voter accounts & roles", action: () => { setActiveNav("Voters"); setSearchModalOpen(false); }, icon: UsersRound },
+                  { label: "Public Ledger & Results", desc: "Cryptographic digests, Merkle roots, blockchain proofs", action: () => { router.push("/results"); setSearchModalOpen(false); }, icon: Blocks },
+                  { label: "Audit Trail", desc: "Immutable SHA-256 administrative event logs", action: () => { router.push("/audit"); setSearchModalOpen(false); }, icon: ClipboardList },
+                  { label: "Verify Receipt", desc: "Independent public ZK & Merkle verifier", action: () => { router.push("/verify"); setSearchModalOpen(false); }, icon: Fingerprint },
+                ].filter((item) => !q || item.label.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q));
+
+                const electionMatches = elections.filter(
+                  (e) => !q || e.name.toLowerCase().includes(q) || e.status.toLowerCase().includes(q) || e.description.toLowerCase().includes(q)
+                );
+
+                const authorityMatches = authorities.filter(
+                  (a) => !q || a.name.toLowerCase().includes(q) || a.email.toLowerCase().includes(q) || a.role.toLowerCase().includes(q)
+                );
+
+                const voterMatches = users.filter(
+                  (u) => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || (u.voterId && u.voterId.toLowerCase().includes(q))
+                ).slice(0, 6);
+
+                const totalMatches = navMatches.length + (q ? electionMatches.length + authorityMatches.length + voterMatches.length : 0);
+
+                if (q && totalMatches === 0) {
+                  return (
+                    <div style={{ padding: "28px 16px", textAlign: "center", color: "#84938a", fontSize: "12px" }}>
+                      No matching records found for &ldquo;{searchQuery}&rdquo;.
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="search-result-group-title">Navigation & Tools</div>
+                    {navMatches.map((item) => {
+                      const IconComp = item.icon;
+                      return (
+                        <button
+                          key={item.label}
+                          type="button"
+                          className="search-result-item"
+                          onClick={item.action}
+                        >
+                          <div className="search-result-item-icon">
+                            <IconComp size={15} />
+                          </div>
+                          <div className="search-result-item-text">
+                            <strong>{item.label}</strong>
+                            <span>{item.desc}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+
+                    {q && electionMatches.length > 0 && (
+                      <>
+                        <div className="search-result-group-title">Elections ({electionMatches.length})</div>
+                        {electionMatches.slice(0, 5).map((elec) => (
+                          <button
+                            key={elec.id}
+                            type="button"
+                            className="search-result-item"
+                            onClick={() => {
+                              router.push("/elections");
+                              setSearchModalOpen(false);
+                            }}
+                          >
+                            <div className="search-result-item-icon">
+                              <Vote size={15} />
+                            </div>
+                            <div className="search-result-item-text">
+                              <strong>{elec.name}</strong>
+                              <span>Status: {elec.status} &bull; {elec.votesCount} votes</span>
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {q && authorityMatches.length > 0 && (
+                      <>
+                        <div className="search-result-group-title">Authorities ({authorityMatches.length})</div>
+                        {authorityMatches.map((auth) => (
+                          <button
+                            key={auth.id}
+                            type="button"
+                            className="search-result-item"
+                            onClick={() => {
+                              setActiveNav("Authorities");
+                              setSearchModalOpen(false);
+                            }}
+                          >
+                            <div className="search-result-item-icon">
+                              <ShieldCheck size={15} />
+                            </div>
+                            <div className="search-result-item-text">
+                              <strong>{auth.name}</strong>
+                              <span>{auth.email} &bull; Slot {auth.authorityIndex}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+
+                    {q && voterMatches.length > 0 && (
+                      <>
+                        <div className="search-result-group-title">Voters ({voterMatches.length})</div>
+                        {voterMatches.map((v) => (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="search-result-item"
+                            onClick={() => {
+                              setActiveNav("Voters");
+                              setSearchModalOpen(false);
+                            }}
+                          >
+                            <div className="search-result-item-icon">
+                              <UsersRound size={15} />
+                            </div>
+                            <div className="search-result-item-text">
+                              <strong>{v.name}</strong>
+                              <span>{v.email} {v.voterId ? `(${v.voterId})` : ""}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            <div className="search-modal-footer">
+              <span>Press <kbd style={{ padding: "1px 5px", border: "1px solid #dce2dc", borderRadius: "3px" }}>ESC</kbd> to exit</span>
+              <span>VoteChain Universal Search</span>
             </div>
           </div>
         </div>
