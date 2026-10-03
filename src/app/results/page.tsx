@@ -169,12 +169,14 @@ export default async function ResultsPage() {
                 digest: digest,
               });
 
+              const displayName = election.name.replace(/Phase\s+\d+\s*[-:]?\s*/gi, "").trim() || election.name;
+
               return (
                 <article className="election-record" key={election.id}>
                   <div className="record-heading">
                     <div>
                       <span className="record-id">{election.id}</span>
-                      <h3>{election.name}</h3>
+                      <h3>{displayName}</h3>
                     </div>
                     <span className="election-status status-results_published"><i />{election.status}</span>
                   </div>

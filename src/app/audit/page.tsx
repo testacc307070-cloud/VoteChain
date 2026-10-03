@@ -71,9 +71,10 @@ export default async function AuditPage() {
         ) : (
           <div className="election-record-list" style={{ marginTop: "2rem" }}>
             {elections.map((election) => {
+              const displayName = election.name.replace(/Phase\s+\d+\s*[-:]?\s*/gi, "").trim() || election.name;
               const trail = buildElectionAuditTrail({
                 electionId: election.id,
-                electionName: election.name,
+                electionName: displayName,
                 startTime: election.startTime,
                 endTime: election.endTime,
                 publishedAt: election.resultsPublishedAt ?? election.endTime,
@@ -86,7 +87,7 @@ export default async function AuditPage() {
                   <div className="record-heading">
                     <div>
                       <span className="record-id">{election.id}</span>
-                      <h3>{election.name}</h3>
+                      <h3>{displayName}</h3>
                     </div>
                     <span className={`election-status status-${election.status.toLowerCase()}`}>
                       <i />{election.status}

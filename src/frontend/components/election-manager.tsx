@@ -509,7 +509,7 @@ export default function ElectionManager({ displayName, initialElections }: Elect
                   <div className="record-heading">
                     <div>
                       <span className="record-id">{election.id}</span>
-                      <h3>{election.name}</h3>
+                      <h3>{election.name.replace(/Phase\s+\d+\s*[-:]?\s*/gi, "").trim() || election.name}</h3>
                       {election.description && <p className="record-description">{election.description}</p>}
                     </div>
                     <span className={`election-status status-${election.status.toLowerCase()}`}>

@@ -7,7 +7,7 @@ interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>,
   inputClassName?: string;
 }
 
-export default function PasswordInput({
+export function PasswordInput({
   id,
   name,
   value,
@@ -85,3 +85,5 @@ export default function PasswordInput({
     </div>
   );
 }
+
+export default PasswordInput;
