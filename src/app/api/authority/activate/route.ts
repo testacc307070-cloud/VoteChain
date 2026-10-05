@@ -25,12 +25,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request payload." }, { status: 400 });
   }
 
-  const { token, password } = body as { token?: unknown; password?: unknown };
+  const { token, password, name } = body as { token?: unknown; password?: unknown; name?: unknown };
   const rawToken = String(token ?? "").trim();
   const rawPassword = String(password ?? "");
+  const cleanName = name !== undefined && name !== null ? String(name).trim() : "";
 
   if (!rawToken || rawToken.length < 32) {
     return NextResponse.json({ error: "A valid invitation token is required." }, { status: 400 });
+  }
+
+  if (cleanName && (cleanName.length < 2 || cleanName.length > 80)) {
+    return NextResponse.json({ error: "Full Name must be between 2 and 80 characters." }, { status: 400 });
   }
 
   const policyCheck = validatePasswordPolicy(rawPassword);
@@ -76,10 +81,11 @@ export async function POST(request: Request) {
         throw new Error("ROLE_MISMATCH");
       }
 
-      // 1. Update user credentials and status
+      // 1. Update user credentials, name, and status
       const updatedUser = await tx.user.update({
         where: { id: tokenRecord.userId },
         data: {
+          name: cleanName || tokenRecord.user.name,
           passwordHash,
           status: UserStatus.ACTIVE,
           emailVerified: true,

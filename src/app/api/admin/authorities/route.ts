@@ -6,7 +6,7 @@ import { prisma } from "@/database/prisma";
 import { requireAdminApi } from "@/backend/voting/admin-api";
 import { generateSecureToken } from "@/backend/auth/token-utils";
 import { sendAuthorityInvitationEmail } from "@/backend/auth/email";
-import { isValidEmail } from "@/backend/auth/auth-validation";
+import { isValidEmail, validatePasswordPolicy } from "@/backend/auth/auth-validation";
 
 export const runtime = "nodejs";
 
@@ -87,6 +87,15 @@ export async function POST(request: Request) {
     invite?: unknown;
   };
 
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+  const host = request.headers.get("host");
+  const reqBaseUrl = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : host
+    ? `${host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https"}://${host}`
+    : undefined;
+
   const cleanName = String(name ?? "").trim();
   const cleanEmail = String(email ?? "").trim().toLowerCase();
   const rawPassword = password ? String(password) : "";
@@ -165,6 +174,7 @@ export async function POST(request: Request) {
         to: newAuthority.email,
         name: newAuthority.name,
         token: rawToken,
+        baseUrl: reqBaseUrl,
       });
 
       // Record append-only audit event (zero raw tokens in logs)
@@ -198,8 +208,15 @@ export async function POST(request: Request) {
       );
     } else {
       // DIRECT PROVISIONING (with explicit password)
-      if (rawPassword.length < 8 || rawPassword.length > 128) {
-        return NextResponse.json({ error: "Password must be at least 8 characters long." }, { status: 400 });
+      const policyCheck = validatePasswordPolicy(rawPassword);
+      if (!policyCheck.valid) {
+        return NextResponse.json(
+          {
+            error: policyCheck.reason || "Password does not meet complexity requirements.",
+            errors: policyCheck.errors,
+          },
+          { status: 400 }
+        );
       }
 
       const passwordHash = await bcrypt.hash(rawPassword, 12);

@@ -12,6 +12,8 @@ export default async function PortalPage({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.role === "ADMIN") redirect("/");
+  if (user.role === "AUTHORITY") redirect("/authority");
+  if (user.role === "OBSERVER") redirect("/observer");
 
   const params = (await searchParams) ?? {};
   const receiptId = typeof params.receiptId === "string" ? params.receiptId : undefined;

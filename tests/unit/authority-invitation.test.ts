@@ -5,16 +5,19 @@ import { UserRole, UserStatus, TokenType } from "@prisma/client";
 import { prisma } from "../../src/database/prisma";
 import { generateSecureToken, hashToken, sanitizeTokenUrl } from "../../src/backend/auth/token-utils";
 import { sendAuthorityInvitationEmail } from "../../src/backend/auth/email";
+import { isValidEmail, isValidPsgEmail, validatePasswordPolicy } from "../../src/backend/auth/auth-validation";
+import { getRoleLandingRoute } from "../../src/backend/auth/role-routing";
+import { checkVoterElectionEligibility } from "../../src/backend/voting/eligibility";
 
 const TEST_AUTH_EMAIL = "test_trustee_invitation@gmail.com";
 const TEST_AUTH_NAME = "Dr. Test Authority";
 
 async function cleanup() {
   await prisma.verificationToken.deleteMany({
-    where: { user: { email: TEST_AUTH_EMAIL } },
+    where: { user: { email: { in: [TEST_AUTH_EMAIL, "expired_trustee@gmail.com", "external_trustee@gmail.com"] } } },
   });
   await prisma.user.deleteMany({
-    where: { email: TEST_AUTH_EMAIL },
+    where: { email: { in: [TEST_AUTH_EMAIL, "expired_trustee@gmail.com", "external_trustee@gmail.com"] } },
   });
 }
 
@@ -41,8 +44,20 @@ test("Authority Token: URL sanitization strips raw token from log outputs", () =
   assert.ok(sanitized.includes("token=REDACTED"));
 });
 
+test("Authority Email Domains: permits external email domains while voter registration requires @psgtech.ac.in", () => {
+  // Authority emails accept Gmail and institutional domains
+  assert.equal(isValidEmail("admin.votechain@gmail.com"), true);
+  assert.equal(isValidEmail("trustee.external@university.edu"), true);
+  assert.equal(isValidEmail("professor@mit.edu"), true);
+
+  // Voter registration strictly requires @psgtech.ac.in
+  assert.equal(isValidPsgEmail("24test01@psgtech.ac.in"), true);
+  assert.equal(isValidPsgEmail("admin.votechain@gmail.com"), false);
+  assert.equal(isValidPsgEmail("trustee.external@university.edu"), false);
+});
+
 test("Authority Invitation Flow: Create invited user, dispatch token, and activate account", async () => {
-  // 1. Create invited authority user
+  // 1. Create invited authority user with an external Gmail address
   const randomMarker = await bcrypt.hash(Date.now().toString(), 12);
   const user = await prisma.user.create({
     data: {
@@ -56,8 +71,9 @@ test("Authority Invitation Flow: Create invited user, dispatch token, and activa
   });
   assert.equal(user.status, UserStatus.INVITED);
   assert.equal(user.emailVerified, false);
+  assert.equal(user.role, UserRole.AUTHORITY);
 
-  // 2. Generate and store token
+  // 2. Generate and store 256-bit CSPRNG token hash
   const { rawToken, tokenHash } = generateSecureToken();
   const tokenRecord = await prisma.verificationToken.create({
     data: {
@@ -70,19 +86,23 @@ test("Authority Invitation Flow: Create invited user, dispatch token, and activa
   assert.equal(tokenRecord.type, TokenType.AUTHORITY_INVITATION);
   assert.equal(tokenRecord.usedAt, null);
 
-  // 3. Dispatch simulated email
+  // 3. Dispatch simulated email with tokenized URL
   const emailResult = await sendAuthorityInvitationEmail({
     to: user.email,
     name: user.name,
     token: rawToken,
+    baseUrl: "https://vote-chain-pi.vercel.app",
   });
   assert.equal(emailResult.success, true);
+  assert.ok(emailResult.setupUrl.startsWith("https://vote-chain-pi.vercel.app/authority/setup?token="));
   assert.ok(emailResult.setupUrl.includes(rawToken));
 
-  // 4. Activate authority account
+  // 4. Activate authority account with password meeting complexity policy
   const newPassword = "TrusteeSecure2026!#";
-  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+  const policyCheck = validatePasswordPolicy(newPassword);
+  assert.equal(policyCheck.valid, true);
 
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
   const updatedUser = await prisma.$transaction(async (tx) => {
     const foundToken = await tx.verificationToken.findUnique({
       where: { tokenHash },
@@ -98,6 +118,7 @@ test("Authority Invitation Flow: Create invited user, dispatch token, and activa
     return tx.user.update({
       where: { id: user.id },
       data: {
+        name: "Dr. Test Authority (Activated)",
         passwordHash: newPasswordHash,
         status: UserStatus.ACTIVE,
         emailVerified: true,
@@ -107,6 +128,8 @@ test("Authority Invitation Flow: Create invited user, dispatch token, and activa
 
   assert.equal(updatedUser.status, UserStatus.ACTIVE);
   assert.equal(updatedUser.emailVerified, true);
+  assert.equal(updatedUser.name, "Dr. Test Authority (Activated)");
+  assert.equal(updatedUser.role, UserRole.AUTHORITY);
   const passwordMatches = await bcrypt.compare(newPassword, updatedUser.passwordHash);
   assert.equal(passwordMatches, true);
 
@@ -149,4 +172,24 @@ test("Authority Token: Expired invitation token is rejected", async () => {
   // Cleanup
   await prisma.verificationToken.deleteMany({ where: { userId: user.id } });
   await prisma.user.delete({ where: { id: user.id } });
+});
+
+test("Authority Role Separation: Login routes to /authority and authority cannot vote as a voter", async () => {
+  // Role landing route maps AUTHORITY to /authority
+  assert.equal(getRoleLandingRoute("AUTHORITY"), "/authority");
+  assert.equal(getRoleLandingRoute("VOTER"), "/portal");
+  assert.equal(getRoleLandingRoute("ADMIN"), "/");
+
+  // Voter eligibility strictly blocks AUTHORITY role from casting ballots
+  const eligibility = await checkVoterElectionEligibility({
+    userId: "test-auth-id",
+    email: "trustee@gmail.com",
+    role: "AUTHORITY",
+    emailVerified: true,
+    electionId: "test-election",
+  });
+
+  assert.equal(eligibility.ok, false);
+  assert.equal(eligibility.errorCode, "NOT_VOTER");
+  assert.ok(eligibility.reason?.includes("Only registered voters"));
 });

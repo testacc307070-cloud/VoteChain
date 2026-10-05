@@ -13,11 +13,20 @@ export const runtime = "nodejs";
  * Invalidates any existing unused invitation tokens and generates a fresh 48-hour invitation.
  */
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ authorityId: string }> }
 ) {
   const auth = await requireAdminApi();
   if (auth.response) return auth.response;
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+  const host = request.headers.get("host");
+  const reqBaseUrl = forwardedHost
+    ? `${forwardedProto}://${forwardedHost}`
+    : host
+    ? `${host.startsWith("localhost") || host.startsWith("127.0.0.1") ? "http" : "https"}://${host}`
+    : undefined;
 
   const { authorityId } = await context.params;
 
@@ -66,6 +75,7 @@ export async function POST(
       to: authorityUser.email,
       name: authorityUser.name,
       token: rawToken,
+      baseUrl: reqBaseUrl,
     });
 
     await prisma.auditLog.create({

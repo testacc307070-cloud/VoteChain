@@ -16,7 +16,9 @@ export const runtime = "nodejs";
 export async function POST(request: Request, context: { params: Promise<{ electionId: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  if (user.role === "ADMIN") return NextResponse.json({ error: "Administrators cannot vote." }, { status: 403 });
+  if (user.role !== "VOTER") {
+    return NextResponse.json({ error: "Only registered student voters can cast ballots in campus elections." }, { status: 403 });
+  }
 
   const { electionId } = await context.params;
 

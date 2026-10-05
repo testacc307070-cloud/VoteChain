@@ -1,58 +1,66 @@
 "use client";
 
-import { useEffect, useState, useTransition, Suspense } from "react";
+import { useEffect, useState, useRef, useTransition, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Shield, Check, X, Lock, CheckCircle2, AlertTriangle, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { Shield, Check, X, Lock, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { PasswordInput } from "@/frontend/components/password-input";
 
 function AuthoritySetupInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const tokenProcessedRef = useRef(false);
   const [rawToken, setRawToken] = useState<string>("");
   const [verifying, setVerifying] = useState<boolean>(true);
   const [verifyError, setVerifyError] = useState<string>("");
   const [trustee, setTrustee] = useState<{ name: string; email: string } | null>(null);
 
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // Extract token, then immediately strip it from browser address bar
+  // Validate token from URL parameter, then remove from address bar AFTER verification
   useEffect(() => {
+    if (tokenProcessedRef.current) return;
+
     const urlToken = searchParams.get("token")?.trim() || "";
-    if (urlToken) {
-      setRawToken(urlToken);
-
-      // Strip sensitive raw token from browser address bar immediately
-      if (typeof window !== "undefined" && window.history?.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-
-      // Verify token with backend
-      fetch(`/api/authority/verify-token?token=${encodeURIComponent(urlToken)}`)
-        .then(async (res) => {
-          const data = await res.json();
-          if (res.ok && data.valid && data.user) {
-            setTrustee(data.user);
-          } else {
-            setVerifyError(data.error || "This invitation link is invalid or has expired.");
-          }
-        })
-        .catch(() => {
-          setVerifyError("Network error checking invitation token.");
-        })
-        .finally(() => {
-          setVerifying(false);
-        });
-    } else {
+    if (!urlToken) {
       setVerifyError("No invitation token was provided in the link.");
       setVerifying(false);
+      return;
     }
+
+    tokenProcessedRef.current = true;
+    setRawToken(urlToken);
+
+    // Verify token with backend BEFORE scrubbing URL to prevent premature state wiping
+    fetch(`/api/authority/verify-token?token=${encodeURIComponent(urlToken)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.valid && data.user) {
+          setTrustee(data.user);
+          setName(data.user.name || "");
+          setEmail(data.user.email || "");
+
+          // AFTER successful validation, immediately remove token from address bar for security
+          if (typeof window !== "undefined" && window.history?.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } else {
+          setVerifyError(data.error || "This invitation link is invalid or has expired.");
+        }
+      })
+      .catch(() => {
+        setVerifyError("Network error checking invitation token.");
+      })
+      .finally(() => {
+        setVerifying(false);
+      });
   }, [searchParams]);
 
   // Real-time password policy validation checks
@@ -66,6 +74,7 @@ function AuthoritySetupInner() {
   };
 
   const isFormValid =
+    name.trim().length >= 2 &&
     checks.length &&
     checks.upper &&
     checks.lower &&
@@ -85,6 +94,7 @@ function AuthoritySetupInner() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             token: rawToken,
+            name: name.trim(),
             password,
           }),
         });
@@ -103,7 +113,7 @@ function AuthoritySetupInner() {
 
   if (verifying) {
     return (
-      <div className="login-box" style={{ maxWidth: 460, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           <Shield style={{ width: 40, height: 40, color: "#6366f1", animation: "pulse 2s infinite" }} />
         </div>
@@ -114,26 +124,38 @@ function AuthoritySetupInner() {
   }
 
   if (verifyError) {
+    const isMissingToken = verifyError === "No invitation token was provided in the link.";
     return (
-      <div className="login-box" style={{ maxWidth: 460, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <AlertTriangle style={{ width: 44, height: 44, color: "#ef4444" }} />
+          {isMissingToken ? (
+            <Shield style={{ width: 44, height: 44, color: "#818cf8" }} />
+          ) : (
+            <AlertTriangle style={{ width: 44, height: 44, color: "#ef4444" }} />
+          )}
         </div>
-        <h2 style={{ fontSize: "1.25rem", color: "#f8fafc", marginBottom: 8 }}>Invalid or Expired Invitation</h2>
-        <p style={{ fontSize: "0.875rem", color: "#cbd5e1", lineHeight: 1.5, marginBottom: 24 }}>{verifyError}</p>
+        <h2 style={{ fontSize: "1.25rem", color: "#f8fafc", marginBottom: 8 }}>
+          {isMissingToken ? "Authority Trustee Registration" : "Invalid or Expired Invitation"}
+        </h2>
+        <p style={{ fontSize: "0.875rem", color: "#cbd5e1", lineHeight: 1.5, marginBottom: 24 }}>
+          {isMissingToken
+            ? "Authority Trustee accounts are created by administrator invitation to maintain 2-of-3 threshold cryptographic custody. If you received an invitation email, please click the setup link in your email. If you have already activated your account, you can sign in below."
+            : verifyError}
+        </p>
         <Link
           href="/login"
           style={{
             display: "inline-block",
             padding: "10px 20px",
-            backgroundColor: "#1e293b",
-            color: "#f8fafc",
+            backgroundColor: "#6366f1",
+            color: "#ffffff",
             borderRadius: 8,
             textDecoration: "none",
             fontSize: "0.875rem",
+            fontWeight: 600,
           }}
         >
-          Return to Sign In
+          Sign In to VoteChain
         </Link>
       </div>
     );
@@ -141,13 +163,13 @@ function AuthoritySetupInner() {
 
   if (success) {
     return (
-      <div className="login-box" style={{ maxWidth: 460, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           <CheckCircle2 style={{ width: 48, height: 48, color: "#10b981" }} />
         </div>
         <h2 style={{ fontSize: "1.35rem", color: "#f8fafc", marginBottom: 8 }}>Trustee Account Activated!</h2>
         <p style={{ fontSize: "0.875rem", color: "#94a3b8", lineHeight: 1.6, marginBottom: 24 }}>
-          Your account has been configured with threshold custody capabilities. You can now log in using your email and the password you just created.
+          Your account has been configured with 2-of-3 threshold cryptographic custody capabilities. You can now log in using your email and the password you just created.
         </p>
         <Link
           href="/login"
@@ -171,28 +193,28 @@ function AuthoritySetupInner() {
   }
 
   return (
-    <div className="login-box" style={{ maxWidth: 480, margin: "40px auto", padding: "32px" }}>
+    <div className="login-box" style={{ maxWidth: 500, margin: "40px auto", padding: "32px" }}>
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <div style={{ display: "inline-flex", padding: 10, borderRadius: 12, backgroundColor: "rgba(99, 102, 241, 0.15)", marginBottom: 12 }}>
           <Shield style={{ width: 32, height: 32, color: "#818cf8" }} />
         </div>
         <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "#ffffff", margin: "0 0 6px" }}>
-          Election Authority Trustee Activation
+          Authority Trustee Registration & Setup
         </h1>
         <p style={{ fontSize: "0.85rem", color: "#94a3b8", margin: 0 }}>
-          Create your private credentials for cryptographic election custody
+          Set up your credentials for 2-of-3 threshold cryptographic election custody
         </p>
       </div>
 
-      {trustee && (
-        <div style={{ backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: "12px 16px", marginBottom: 20 }}>
-          <div style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b", marginBottom: 2 }}>
-            Trustee Identity
-          </div>
-          <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#f8fafc" }}>{trustee.name}</div>
-          <div style={{ fontSize: "0.85rem", color: "#818cf8" }}>{trustee.email}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Shield size={16} style={{ color: "#818cf8" }} />
+          <span style={{ fontSize: "0.82rem", color: "#f8fafc", fontWeight: 600 }}>Role: Authority Trustee</span>
         </div>
-      )}
+        <span style={{ fontSize: "0.72rem", backgroundColor: "rgba(234, 179, 8, 0.15)", color: "#facc15", padding: "2px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: "0.04em" }}>
+          STATUS: INVITED
+        </span>
+      </div>
 
       {submitError && (
         <div style={{ backgroundColor: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 18, color: "#fca5a5", fontSize: "0.85rem" }}>
@@ -201,96 +223,90 @@ function AuthoritySetupInner() {
       )}
 
       <form onSubmit={handleSubmit}>
+        {/* Full Name */}
         <div style={{ marginBottom: 16 }}>
           <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
-            Set Secret Password
+            Full Name
           </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter strong password"
-              style={{
-                width: "100%",
-                padding: "10px 42px 10px 12px",
-                backgroundColor: "#090d16",
-                border: "1px solid #1e293b",
-                borderRadius: 8,
-                color: "#ffffff",
-                fontSize: "0.9rem",
-              }}
-              required
-            />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowPassword((p) => !p)}
-              style={{
-                position: "absolute",
-                right: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "#94a3b8",
-                display: "grid",
-                placeItems: "center",
-                padding: 4,
-              }}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              title={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            minLength={2}
+            maxLength={80}
+            placeholder="Your full name"
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              backgroundColor: "#090d16",
+              border: "1px solid #1e293b",
+              borderRadius: 8,
+              color: "#ffffff",
+              fontSize: "0.9rem",
+            }}
+          />
         </div>
 
+        {/* Email Address (Bound to Invitation) */}
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1" }}>
+              Authority Email
+            </label>
+            <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+              <CheckCircle2 size={12} /> Bound to Invitation
+            </span>
+          </div>
+          <input
+            type="email"
+            value={email}
+            readOnly
+            disabled
+            style={{
+              width: "100%",
+              padding: "10px 12px",
+              backgroundColor: "#0f172a",
+              border: "1px solid #1e293b",
+              borderRadius: 8,
+              color: "#94a3b8",
+              fontSize: "0.9rem",
+              cursor: "not-allowed",
+            }}
+          />
+          <span style={{ display: "block", fontSize: "0.74rem", color: "#64748b", marginTop: 4 }}>
+            Account is bound to this invited address. External domains (e.g. Gmail) are fully supported.
+          </span>
+        </div>
+
+        {/* Password */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
+            Password
+          </label>
+          <PasswordInput
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter strong password"
+            required
+            autoComplete="new-password"
+            className="w-full"
+          />
+        </div>
+
+        {/* Confirm Password */}
         <div style={{ marginBottom: 20 }}>
           <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
             Confirm Password
           </label>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showConfirmPassword ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Re-enter password"
-              style={{
-                width: "100%",
-                padding: "10px 42px 10px 12px",
-                backgroundColor: "#090d16",
-                border: "1px solid #1e293b",
-                borderRadius: 8,
-                color: "#ffffff",
-                fontSize: "0.9rem",
-              }}
-              required
-            />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => setShowConfirmPassword((p) => !p)}
-              style={{
-                position: "absolute",
-                right: "10px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                color: "#94a3b8",
-                display: "grid",
-                placeItems: "center",
-                padding: 4,
-              }}
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-              title={showConfirmPassword ? "Hide password" : "Show password"}
-            >
-              {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
+          <PasswordInput
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter password"
+            required
+            autoComplete="new-password"
+            className="w-full"
+          />
         </div>
 
         {/* Policy Checklist */}
@@ -325,10 +341,11 @@ function AuthoritySetupInner() {
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
+            transition: "background-color 0.15s ease",
           }}
         >
           <Lock style={{ width: 16, height: 16 }} />
-          {isPending ? "Activating Account..." : "Set Password & Activate Trustee"}
+          {isPending ? "Activating Trustee Account..." : "Complete Authority Registration"}
         </button>
       </form>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, Suspense } from "react";
+import { useEffect, useState, useRef, useTransition, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Lock, KeyRound, Check, X, AlertTriangle, CheckCircle2, ArrowRight } from "lucide-react";
@@ -10,6 +10,7 @@ function ResetPasswordInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  const tokenProcessedRef = useRef(false);
   const [rawToken, setRawToken] = useState("");
   const [verifying, setVerifying] = useState(true);
   const [verifyError, setVerifyError] = useState("");
@@ -22,34 +23,37 @@ function ResetPasswordInner() {
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
+    if (tokenProcessedRef.current) return;
+
     const urlToken = searchParams.get("token")?.trim() || "";
-    if (urlToken) {
-      setRawToken(urlToken);
-
-      // Immediately sanitize browser address bar to prevent token leakage
-      if (typeof window !== "undefined" && window.history?.replaceState) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-
-      fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(urlToken)}`)
-        .then(async (res) => {
-          const data = await res.json();
-          if (res.ok && data.valid) {
-            setAccountEmail(data.email || "");
-          } else {
-            setVerifyError(data.error || "This password reset link is invalid or has expired.");
-          }
-        })
-        .catch(() => {
-          setVerifyError("Network error checking password reset link.");
-        })
-        .finally(() => {
-          setVerifying(false);
-        });
-    } else {
+    if (!urlToken) {
       setVerifyError("No reset token was provided in the link.");
       setVerifying(false);
+      return;
     }
+
+    tokenProcessedRef.current = true;
+    setRawToken(urlToken);
+
+    fetch(`/api/auth/verify-reset-token?token=${encodeURIComponent(urlToken)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok && data.valid) {
+          setAccountEmail(data.email || "");
+          // After successful validation, immediately sanitize browser address bar
+          if (typeof window !== "undefined" && window.history?.replaceState) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } else {
+          setVerifyError(data.error || "This password reset link is invalid or has expired.");
+        }
+      })
+      .catch(() => {
+        setVerifyError("Network error checking password reset link.");
+      })
+      .finally(() => {
+        setVerifying(false);
+      });
   }, [searchParams]);
 
   const checks = {
