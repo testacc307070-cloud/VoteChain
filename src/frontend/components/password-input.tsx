@@ -5,6 +5,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
   inputClassName?: string;
+  inputStyle?: React.CSSProperties;
 }
 
 export function PasswordInput({
@@ -21,6 +22,7 @@ export function PasswordInput({
   style,
   className,
   inputClassName,
+  inputStyle,
   ...rest
 }: PasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
@@ -52,8 +54,9 @@ export function PasswordInput({
         className={inputClassName}
         style={{
           width: "100%",
-          paddingRight: "2.75rem",
           boxSizing: "border-box",
+          ...inputStyle,
+          paddingRight: "2.75rem",
         }}
       />
       <button

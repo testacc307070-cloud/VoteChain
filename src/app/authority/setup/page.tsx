@@ -113,12 +113,24 @@ function AuthoritySetupInner() {
 
   if (verifying) {
     return (
-      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div
+        className="login-box"
+        style={{
+          maxWidth: 480,
+          margin: "60px auto",
+          padding: "32px",
+          textAlign: "center",
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <Shield style={{ width: 40, height: 40, color: "#6366f1", animation: "pulse 2s infinite" }} />
+          <Shield style={{ width: 40, height: 40, color: "#4f46e5", animation: "pulse 2s infinite" }} />
         </div>
-        <h2 style={{ fontSize: "1.25rem", color: "#f8fafc", marginBottom: 8 }}>Verifying Invitation Link...</h2>
-        <p style={{ fontSize: "0.875rem", color: "#94a3b8" }}>Securing connection and checking trustee authorization...</p>
+        <h2 style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>Verifying Invitation Link...</h2>
+        <p style={{ fontSize: "0.875rem", color: "#475569" }}>Securing connection and checking trustee authorization...</p>
       </div>
     );
   }
@@ -126,18 +138,30 @@ function AuthoritySetupInner() {
   if (verifyError) {
     const isMissingToken = verifyError === "No invitation token was provided in the link.";
     return (
-      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div
+        className="login-box"
+        style={{
+          maxWidth: 480,
+          margin: "60px auto",
+          padding: "32px",
+          textAlign: "center",
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           {isMissingToken ? (
-            <Shield style={{ width: 44, height: 44, color: "#818cf8" }} />
+            <Shield style={{ width: 44, height: 44, color: "#4f46e5" }} />
           ) : (
-            <AlertTriangle style={{ width: 44, height: 44, color: "#ef4444" }} />
+            <AlertTriangle style={{ width: 44, height: 44, color: "#dc2626" }} />
           )}
         </div>
-        <h2 style={{ fontSize: "1.25rem", color: "#f8fafc", marginBottom: 8 }}>
+        <h2 style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>
           {isMissingToken ? "Authority Trustee Registration" : "Invalid or Expired Invitation"}
         </h2>
-        <p style={{ fontSize: "0.875rem", color: "#cbd5e1", lineHeight: 1.5, marginBottom: 24 }}>
+        <p style={{ fontSize: "0.875rem", color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>
           {isMissingToken
             ? "Authority Trustee accounts are created by administrator invitation to maintain 2-of-3 threshold cryptographic custody. If you received an invitation email, please click the setup link in your email. If you have already activated your account, you can sign in below."
             : verifyError}
@@ -147,7 +171,7 @@ function AuthoritySetupInner() {
           style={{
             display: "inline-block",
             padding: "10px 20px",
-            backgroundColor: "#6366f1",
+            backgroundColor: "#4f46e5",
             color: "#ffffff",
             borderRadius: 8,
             textDecoration: "none",
@@ -163,12 +187,24 @@ function AuthoritySetupInner() {
 
   if (success) {
     return (
-      <div className="login-box" style={{ maxWidth: 480, margin: "60px auto", padding: "32px", textAlign: "center" }}>
+      <div
+        className="login-box"
+        style={{
+          maxWidth: 480,
+          margin: "60px auto",
+          padding: "32px",
+          textAlign: "center",
+          backgroundColor: "#ffffff",
+          border: "1px solid #e2e8f0",
+          borderRadius: 12,
+          boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <CheckCircle2 style={{ width: 48, height: 48, color: "#10b981" }} />
+          <CheckCircle2 style={{ width: 48, height: 48, color: "#16a34a" }} />
         </div>
-        <h2 style={{ fontSize: "1.35rem", color: "#f8fafc", marginBottom: 8 }}>Trustee Account Activated!</h2>
-        <p style={{ fontSize: "0.875rem", color: "#94a3b8", lineHeight: 1.6, marginBottom: 24 }}>
+        <h2 style={{ fontSize: "1.35rem", color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>Trustee Account Activated!</h2>
+        <p style={{ fontSize: "0.875rem", color: "#475569", lineHeight: 1.6, marginBottom: 24 }}>
           Your account has been configured with 2-of-3 threshold cryptographic custody capabilities. You can now log in using your email and the password you just created.
         </p>
         <Link
@@ -178,7 +214,7 @@ function AuthoritySetupInner() {
             alignItems: "center",
             gap: 8,
             padding: "12px 24px",
-            backgroundColor: "#6366f1",
+            backgroundColor: "#4f46e5",
             color: "#ffffff",
             borderRadius: 8,
             textDecoration: "none",
@@ -193,31 +229,74 @@ function AuthoritySetupInner() {
   }
 
   return (
-    <div className="login-box" style={{ maxWidth: 500, margin: "40px auto", padding: "32px" }}>
+    <div
+      className="login-box"
+      style={{
+        maxWidth: 500,
+        margin: "40px auto",
+        padding: "32px",
+        backgroundColor: "#ffffff",
+        border: "1px solid #e2e8f0",
+        borderRadius: 12,
+        boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
+      }}
+    >
       <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ display: "inline-flex", padding: 10, borderRadius: 12, backgroundColor: "rgba(99, 102, 241, 0.15)", marginBottom: 12 }}>
-          <Shield style={{ width: 32, height: 32, color: "#818cf8" }} />
+        <div style={{ display: "inline-flex", padding: 10, borderRadius: 12, backgroundColor: "#eef2ff", marginBottom: 12 }}>
+          <Shield style={{ width: 32, height: 32, color: "#4f46e5" }} />
         </div>
-        <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "#ffffff", margin: "0 0 6px" }}>
+        <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
           Authority Trustee Registration & Setup
         </h1>
-        <p style={{ fontSize: "0.85rem", color: "#94a3b8", margin: 0 }}>
+        <p style={{ fontSize: "0.85rem", color: "#475569", margin: 0 }}>
           Set up your credentials for 2-of-3 threshold cryptographic election custody
         </p>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#0f172a", border: "1px solid #1e293b", borderRadius: 8, padding: "10px 14px", marginBottom: 20 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          backgroundColor: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: 8,
+          padding: "10px 14px",
+          marginBottom: 20,
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Shield size={16} style={{ color: "#818cf8" }} />
-          <span style={{ fontSize: "0.82rem", color: "#f8fafc", fontWeight: 600 }}>Role: Authority Trustee</span>
+          <Shield size={16} style={{ color: "#4f46e5" }} />
+          <span style={{ fontSize: "0.82rem", color: "#1e293b", fontWeight: 600 }}>Role: Authority Trustee</span>
         </div>
-        <span style={{ fontSize: "0.72rem", backgroundColor: "rgba(234, 179, 8, 0.15)", color: "#facc15", padding: "2px 8px", borderRadius: 4, fontWeight: 600, letterSpacing: "0.04em" }}>
+        <span
+          style={{
+            fontSize: "0.72rem",
+            backgroundColor: "#fef3c7",
+            border: "1px solid #fde68a",
+            color: "#92400e",
+            padding: "2px 8px",
+            borderRadius: 4,
+            fontWeight: 600,
+            letterSpacing: "0.04em",
+          }}
+        >
           STATUS: INVITED
         </span>
       </div>
 
       {submitError && (
-        <div style={{ backgroundColor: "rgba(239, 68, 68, 0.15)", border: "1px solid rgba(239, 68, 68, 0.3)", borderRadius: 8, padding: "10px 14px", marginBottom: 18, color: "#fca5a5", fontSize: "0.85rem" }}>
+        <div
+          style={{
+            backgroundColor: "#fef2f2",
+            border: "1px solid #fecaca",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 18,
+            color: "#991b1b",
+            fontSize: "0.85rem",
+          }}
+        >
           {submitError}
         </div>
       )}
@@ -225,7 +304,7 @@ function AuthoritySetupInner() {
       <form onSubmit={handleSubmit}>
         {/* Full Name */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
+          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#1e293b", marginBottom: 6 }}>
             Full Name
           </label>
           <input
@@ -239,11 +318,12 @@ function AuthoritySetupInner() {
             style={{
               width: "100%",
               padding: "10px 12px",
-              backgroundColor: "#090d16",
-              border: "1px solid #1e293b",
+              backgroundColor: "#ffffff",
+              border: "1px solid #cbd5e1",
               borderRadius: 8,
-              color: "#ffffff",
+              color: "#0f172a",
               fontSize: "0.9rem",
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -251,10 +331,23 @@ function AuthoritySetupInner() {
         {/* Email Address (Bound to Invitation) */}
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <label style={{ fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "#1e293b" }}>
               Authority Email
             </label>
-            <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                fontSize: "0.72rem",
+                color: "#15803d",
+                backgroundColor: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                padding: "2px 6px",
+                borderRadius: 4,
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+              }}
+            >
               <CheckCircle2 size={12} /> Bound to Invitation
             </span>
           </div>
@@ -266,22 +359,23 @@ function AuthoritySetupInner() {
             style={{
               width: "100%",
               padding: "10px 12px",
-              backgroundColor: "#0f172a",
-              border: "1px solid #1e293b",
+              backgroundColor: "#f1f5f9",
+              border: "1px solid #e2e8f0",
               borderRadius: 8,
-              color: "#94a3b8",
+              color: "#334155",
               fontSize: "0.9rem",
               cursor: "not-allowed",
+              boxSizing: "border-box",
             }}
           />
-          <span style={{ display: "block", fontSize: "0.74rem", color: "#64748b", marginTop: 4 }}>
+          <span style={{ display: "block", fontSize: "0.74rem", color: "#475569", marginTop: 4 }}>
             Account is bound to this invited address. External domains (e.g. Gmail) are fully supported.
           </span>
         </div>
 
         {/* Password */}
         <div style={{ marginBottom: 16 }}>
-          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
+          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#1e293b", marginBottom: 6 }}>
             Password
           </label>
           <PasswordInput
@@ -291,12 +385,20 @@ function AuthoritySetupInner() {
             required
             autoComplete="new-password"
             className="w-full"
+            inputStyle={{
+              backgroundColor: "#ffffff",
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              color: "#0f172a",
+              fontSize: "0.9rem",
+              padding: "10px 12px",
+            }}
           />
         </div>
 
         {/* Confirm Password */}
         <div style={{ marginBottom: 20 }}>
-          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 500, color: "#cbd5e1", marginBottom: 6 }}>
+          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "#1e293b", marginBottom: 6 }}>
             Confirm Password
           </label>
           <PasswordInput
@@ -306,12 +408,37 @@ function AuthoritySetupInner() {
             required
             autoComplete="new-password"
             className="w-full"
+            inputStyle={{
+              backgroundColor: "#ffffff",
+              border: "1px solid #cbd5e1",
+              borderRadius: 8,
+              color: "#0f172a",
+              fontSize: "0.9rem",
+              padding: "10px 12px",
+            }}
           />
         </div>
 
         {/* Policy Checklist */}
-        <div style={{ backgroundColor: "#090d16", border: "1px solid #1e293b", borderRadius: 8, padding: "12px", marginBottom: 24 }}>
-          <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", marginBottom: 8, textTransform: "uppercase" }}>
+        <div
+          style={{
+            backgroundColor: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: 8,
+            padding: "14px 16px",
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              color: "#334155",
+              marginBottom: 8,
+              textTransform: "uppercase",
+              letterSpacing: "0.04em",
+            }}
+          >
             Password Security Requirements
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px", fontSize: "0.78rem" }}>
@@ -330,9 +457,9 @@ function AuthoritySetupInner() {
           style={{
             width: "100%",
             padding: "12px",
-            backgroundColor: isFormValid ? "#6366f1" : "#334155",
+            backgroundColor: isFormValid ? "#4f46e5" : "#e2e8f0",
             color: isFormValid ? "#ffffff" : "#94a3b8",
-            border: "none",
+            border: isFormValid ? "1px solid #4338ca" : "1px solid #cbd5e1",
             borderRadius: 8,
             fontWeight: 600,
             fontSize: "0.95rem",
@@ -341,7 +468,8 @@ function AuthoritySetupInner() {
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            transition: "background-color 0.15s ease",
+            boxShadow: isFormValid ? "0 2px 8px rgba(79, 70, 229, 0.25)" : "none",
+            transition: "all 0.15s ease",
           }}
         >
           <Lock style={{ width: 16, height: 16 }} />
@@ -354,8 +482,20 @@ function AuthoritySetupInner() {
 
 function PolicyItem({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, color: ok ? "#10b981" : "#64748b" }}>
-      {ok ? <Check style={{ width: 13, height: 13, color: "#10b981" }} /> : <X style={{ width: 13, height: 13, color: "#64748b" }} />}
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        color: ok ? "#166534" : "#64748b",
+        fontWeight: ok ? 500 : 400,
+      }}
+    >
+      {ok ? (
+        <Check style={{ width: 14, height: 14, color: "#16a34a", flexShrink: 0 }} />
+      ) : (
+        <X style={{ width: 14, height: 14, color: "#94a3b8", flexShrink: 0 }} />
+      )}
       <span>{label}</span>
     </div>
   );
@@ -364,7 +504,7 @@ function PolicyItem({ label, ok }: { label: string; ok: boolean }) {
 export default function AuthoritySetupPage() {
   return (
     <main className="portal-shell" style={{ minHeight: "100vh", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-      <Suspense fallback={<div style={{ textAlign: "center", color: "#94a3b8", padding: 40 }}>Loading invitation...</div>}>
+      <Suspense fallback={<div style={{ textAlign: "center", color: "#475569", padding: 40, fontWeight: 500 }}>Loading invitation...</div>}>
         <AuthoritySetupInner />
       </Suspense>
     </main>
