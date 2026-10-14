@@ -88,13 +88,16 @@
 - [x] **Double-blind database separation** (zero link between voter and candidate selection)
 - [x] **Real Ethereum Sepolia blockchain transaction mining**
 - [x] **Immutable cryptographic receipts issued to voters**
+- [x] **Downloadable personal vote receipt PDF** (pure vector PDF 1.4, candidate choice strictly omitted)
+- [x] **Observer access codes & live monitoring dashboard** (scoped HMAC tokens, 15s auto-refresh)
+- [x] **Voter results viewing after official publication** (interim tallies withheld, verified totals revealed)
 - [x] **Duplicate vote blocking & replay protection** (one-person-one-vote)
 - [x] **Mandatory 2-of-3 Shamir threshold authority decryption**
 - [x] **Balanced SHA-256 Merkle tree universal inclusion verification**
 - [x] **Real persistent offline voting via IndexedDB and automatic synchronization**
 - [x] **Zero exposed secrets, private keys, or passwords in client bundle or Git**
-- [x] **100% passing test suites** (143 unit/security tests, 6 contract tests, 9 offline tests, 12 simulation steps)
-- [x] **Clean production build with zero type errors** (Next.js 16 Turbopack)
+- [x] **100% passing test suites** (185 automated unit, security, and contract tests)
+- [x] **Clean production build with zero type errors** (Next.js 16 Turbopack, 35 routes)
 
 ---
 

@@ -351,7 +351,7 @@ test("Phase 9.3: Mandatory 2-of-3 Threshold Authority Reconstruction Suite", asy
     // Direct resolution for purpose="results_tally" MUST throw on modern elections
     assert.throws(
       () => getElectionEncryptionKey(modernElection, { purpose: "results_tally" }),
-      /Direct master key resolution is forbidden for results tallying in Phase 9\+/,
+      /Direct master key resolution is forbidden for results tallying/,
     );
 
     // Attempting to tally modern ballots with BALLOT_ENCRYPTION_KEY fails AES-GCM decryption

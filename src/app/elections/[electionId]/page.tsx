@@ -36,8 +36,8 @@ export default async function ElectionDetailPage({
   if (!election) redirect("/elections");
 
   const isPublished = election.status === "RESULTS_PUBLISHED";
-  const isClosed = election.status === "CLOSED" || isPublished;
-  const summary = isClosed ? summarizeStoredElectionResults(
+  const isClosed = election.status === "CLOSED";
+  const summary = isPublished ? summarizeStoredElectionResults(
       election.id,
       election.candidates.map((candidate) => ({ id: candidate.id, name: candidate.name })),
       election.votes,
@@ -85,8 +85,12 @@ export default async function ElectionDetailPage({
 
         {!summary ? (
           <div className="election-empty">
-            <strong>Election is still live.</strong>
-            <span>Results remain hidden until the election closes and the admin publishes the outcome.</span>
+            <strong>{isClosed ? "Election is closed." : "Election is still live."}</strong>
+            <span>
+              {isClosed
+                ? "Results remain strictly encrypted until the election administrator officially publishes the verified outcome."
+                : "Results remain hidden until the election closes and the admin publishes the outcome."}
+            </span>
           </div>
         ) : (
           <>

@@ -85,8 +85,9 @@ export default async function ObserverPage() {
               const blockchainSummary = buildBlockchainSummary(chain);
               const isLedgerValid = verifyBlockchainChain(chain);
 
+              const isPublished = election.status === "RESULTS_PUBLISHED";
               const summary =
-                election.status === "ACTIVE"
+                !isPublished
                   ? null
                   : summarizeStoredElectionResults(
                       election.id,

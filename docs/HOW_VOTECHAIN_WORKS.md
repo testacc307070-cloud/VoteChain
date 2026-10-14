@@ -161,16 +161,19 @@ VoteChain provides robust administrative capabilities strictly guarded by server
 1. **Admin Authentication & CLI Recovery**:
    - The `ADMIN` account authenticates at `/api/auth/login` and is routed directly to the System Console at `/`.
    - Admin credentials are protected with Bcrypt (cost factor 12).
-   - A standalone CLI management script (`scripts/create-or-reset-admin.ts`) enables operators to safely reset administrator passwords without exposing database credentials or hardcoding secrets:
+   - A standalone CLI management script (`scripts/create-or-reset-admin.ts`) enables operators to safely provision or reset administrator passwords without exposing database credentials, shell history, or process arguments:
      ```bash
-     npx tsx --env-file=.env scripts/create-or-reset-admin.ts [email] [newPassword]
+     npx tsx --env-file=.env scripts/create-or-reset-admin.ts [email]
      ```
+   - The CLI prompts interactively with hidden input for the password and asks for password confirmation. Passwords are never accepted as command-line arguments.
 
 2. **Multi-Party Authority Trustee Management**:
    - Managed via `/api/admin/authorities` and the Admin Dashboard.
-   - Exactly **3 authority accounts** (Authority 1, Authority 2, Authority 3) hold key shares in the 2-of-3 threshold custody system.
-   - System enforces a hard ceiling of 3 authorities; creation attempts beyond 3 are rejected with HTTP 400.
-   - **Strict Role Isolation**: Authority accounts are prohibited from voting. If an authority email is included in a class eligibility list, the upload is rejected.
+   - Exactly **3 authority accounts** hold key shares in the 2-of-3 threshold custody system.
+   - External email domains (e.g. Gmail) are accepted for trustee accounts.
+   - Invitations generate a cryptographically secure 256-bit token; only the SHA-256 hash is stored in the database.
+   - Tokens expire after 48 hours and point to `/authority/setup?token=...`.
+   - Setup page enforces a minimum 12-character password with complexity rules and WCAG-compliant high-contrast styling.
    - Private Shamir shares are generated only upon threshold sign-off and are never returned in administrative GET/POST responses.
 
 3. **Early Election Closure ("Close Election Now")**:
@@ -185,6 +188,34 @@ VoteChain provides robust administrative capabilities strictly guarded by server
    - **Audit Trail Preservation Rule**: Elections with recorded votes (`votesCount > 0` or `participationsCount > 0`) **cannot be deleted** (HTTP 400). This protects the integrity of immutable Ethereum Sepolia transactions and Merkle inclusion proofs.
    - **Unvoted Elections**: Elections with 0 cast votes can be safely deleted. Cascading deletion safely purges candidates, eligibility mappings, and blocks inside an atomic database transaction.
    - Requires explicit confirmation dialog with confirmation text validation in the UI.
+
+### 3.9 Downloadable Personal Vote Receipt PDF
+VoteChain includes a zero-dependency, pure vector PDF 1.4 generator (`src/backend/receipt/pdf-generator.ts` and `src/app/api/voter/receipt/pdf/route.ts`):
+- **Ballot Secrecy Guarantee**: The PDF **never contains the candidate name, candidate ID, or selection choice**, ensuring receipts cannot be leveraged for voter coercion or vote-buying.
+- **Proof of Inclusion Elements**:
+  - Personal Receipt ID and Vote Reference ID.
+  - Ethereum Sepolia transaction hash and mined block number.
+  - Receipt record hash: $\text{SHA-256}(\text{electionId} : \text{voteId} : \text{submittedAt})$.
+  - Merkle inclusion status and root commitment.
+  - Step-by-step verification instructions and a direct link to `/verify`.
+- **Strict Authorization**: Restricted to the voter's own cast ballot via session validation (`ElectionVoterParticipation` and `ElectionVote.voterId`), preventing ID substitution attacks.
+
+### 3.10 Independent Observer Access & Real-Time Monitoring
+VoteChain provides dedicated real-time monitoring for election observers (`src/app/observe/page.tsx`):
+- **Access Code Authentication**: Admins generate election-scoped codes (`VC-OBS-XXXX-XXXX-XXXX`). Only the SHA-256 hash is persisted in the database.
+- **Auto-Resolution & Scoped Sessions**: Observers can select an election or paste the code directly to auto-resolve the election. Successful authentication issues a time-slotted, election-scoped HMAC session token (`src/backend/auth/observer-token.ts`).
+- **Code Revocation/Rotation**: Rotating or removing the access code in the admin console immediately invalidates all active observer tokens.
+- **Live Read-Only Dashboard**:
+  - Displays real-time turnout %, total votes recorded, eligible voters, blockchain block height, and chain validity.
+  - Features configurable 15-second auto-refresh with active pause toggle.
+  - Candidate vote counts remain strictly withheld until official publication.
+  - Streams micro-blockchain block headers and append-only cryptographic audit logs.
+
+### 3.11 Voter Results Viewing After Official Publication
+VoteChain strictly protects ballot tally secrecy until official authorization:
+- **Pre-Publication Guard**: While an election is `ACTIVE` or `CLOSED`, candidate tallies and winners are strictly withheld across all voter, observer, and results pages (`/portal`, `/results`, `/observe`, `/observer`).
+- **Official Publication**: Once 2-of-3 authority key shares are submitted, the master DEK is reconstructed, ballots are decrypted, and the administrator officially marks the election as `RESULTS_PUBLISHED`.
+- **Voter Dashboard Results Card**: Eligible voters opening `/portal` can view the verified final results, candidate vote counts, percentage progress bars, and the official winner with a trophy indicator.
 
 ---
 
@@ -202,6 +233,9 @@ VoteChain provides robust administrative capabilities strictly guarded by server
 | **Zero-Knowledge Proofs** | **Production** | BabyJubjub CDS 1-of-$N$ Schnorr NIZKP with Poseidon hashing via `circomlibjs` (`src/security/zk-proof.ts`). |
 | **Ethereum Sepolia Blockchain** | **Production** | `VoteChainLedger.sol` on Sepolia testnet at `0x7339F8B088A2835F26e158c9F96690395D80264D`. |
 | **Persistent Offline Voting** | **Production** | Client-side IndexedDB queue, WebCrypto AES-256-GCM, auto-sync upon `online` event. |
+| **Downloadable PDF Receipts** | **Production** | Pure vector PDF 1.4 generator, candidate choice strictly omitted, on-chain attestation (`src/backend/receipt/pdf-generator.ts`). |
+| **Observer Access & Monitoring** | **Production** | Scoped access codes, HMAC session tokens, live turnout metrics, 15s auto-refresh (`/observe`). |
+| **Voter Results After Publication**| **Production** | Interim tallies withheld; verified tallies and winner display revealed upon publication (`/portal`, `/results`). |
 | **Merkle Universal Verifiability** | **Production** | Balanced SHA-256 Merkle tree, inclusion proof generator, public verifier (`/verify`). |
 | **Micro-Blockchain Ledger** | **Production** | Chained block audit trail, SHA-256 previousHash links, tamper detection simulation (`/observer`). |
 
@@ -209,4 +243,4 @@ VoteChain provides robust administrative capabilities strictly guarded by server
 
 ## 5. Summary
 
-VoteChain implements an end-to-end verifiable classroom electronic voting system that combines Zero-Knowledge proofs, double-blind database architecture, multi-authority threshold cryptography, Ethereum Sepolia blockchain commitments, and persistent offline recovery into a unified, open-source stack.
+VoteChain implements an end-to-end verifiable classroom electronic voting system that combines Zero-Knowledge proofs, double-blind database architecture, multi-authority threshold cryptography, Ethereum Sepolia blockchain commitments, persistent offline recovery, vector PDF receipts, and independent observer monitoring into a unified, open-source stack.

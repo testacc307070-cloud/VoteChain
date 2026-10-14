@@ -51,7 +51,7 @@ The system is deployed on a modern, serverless cloud architecture:
 ========================================================================================
   Test Category / Suite                 File Reference                  Tests   Result
   --------------------------------------------------------------------------------------
-  Core Unit & Cryptographic Suite       tests/unit/*.test.ts                143     PASS
+  Core Unit & Cryptographic Suite       tests/unit/*.test.ts                158     PASS
     • Registration & Email Tokens       registration.test.ts              13     PASS
     • Class Eligibility Whitelisting    class-eligibility.test.ts          9     PASS
     • One-Person-One-Vote & Auth        one-vote-auth.test.ts              8     PASS
@@ -67,14 +67,16 @@ The system is deployed on a modern, serverless cloud architecture:
     • CSRF Same-Origin Guards           csrf.test.ts                       4     PASS
     • Voting Logic & Receipts           voting.test.ts                     4     PASS
     • Role-Based Route Guards           role-routing.test.ts               4     PASS
+    • PDF Receipts & Observer Tokens    voter-results-receipt-observer.ts  3     PASS
+    • Observer Access Codes             observer-access.test.ts            1     PASS
     • Audit Trail & Public Results      audit.test.ts, results, etc.      28     PASS
   --------------------------------------------------------------------------------------
   Phase 13 Real Offline Voting Suite    tests/unit/offline-voting.test.ts     9     PASS
   Smart Contract Automated Test Suite   tests/contracts/VoteChainLedger.test.ts  6     PASS
   Phase 14 Full Election Simulation     scripts/verify-phase14...ts       12     PASS
-  Production Turbopack Build            npm run build (20 routes)         20     PASS
+  Production Turbopack Build            npm run build (35 routes)         35     PASS
 ========================================================================================
-  TOTAL TESTS EXECUTED:                 170 Automated Tests + 20 Routes    0 FAILURES
+  TOTAL TESTS EXECUTED:                 185 Automated Tests + 35 Routes    0 FAILURES
 ========================================================================================
 ```
 

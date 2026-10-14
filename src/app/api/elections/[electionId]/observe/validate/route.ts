@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/database/prisma";
 import { hashToken } from "@/backend/auth/token-utils";
+import { createObserverSessionToken } from "@/backend/auth/observer-token";
 
 export const runtime = "nodejs";
 
@@ -109,7 +110,7 @@ export async function POST(
     recordSuccess(rateLimitKey);
 
     // Create a temporary scoped observer access proof token
-    const sessionToken = hashToken(`${electionId}:${code}:${Math.floor(Date.now() / (1000 * 60 * 60))}`);
+    const sessionToken = createObserverSessionToken(election.id, election.observerAccessCodeHash);
 
     return NextResponse.json({
       ok: true,

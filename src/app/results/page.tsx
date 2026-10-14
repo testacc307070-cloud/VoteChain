@@ -115,8 +115,9 @@ export default async function ResultsPage() {
                 }
               }
 
+              const isPublished = election.status === "RESULTS_PUBLISHED";
               let summary;
-              if (encryptionKeyToUse) {
+              if (isPublished && encryptionKeyToUse) {
                 try {
                   summary = summarizeStoredElectionResults(
                     election.id,
@@ -189,7 +190,11 @@ export default async function ResultsPage() {
                     <div className="results-meta-card">
                       <span className="results-meta-label">Winner</span>
                       <strong className="results-meta-value results-meta-winner">
-                        {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount} votes)` : "No votes recorded"}
+                        {isPublished
+                          ? summary.winner
+                            ? `${summary.winner.name} (${summary.winner.voteCount} votes)`
+                            : "No votes recorded"
+                          : "Pending official publication"}
                       </strong>
                     </div>
                     <div className="results-meta-card">
@@ -230,27 +235,43 @@ export default async function ResultsPage() {
 
                   <div style={{ marginTop: "1.5rem" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                      <strong style={{ fontSize: "12px", color: "#37453d" }}>Candidate Results</strong>
-                      <span style={{ fontSize: "10px", color: "#85938a" }}>{summary.totalVotes} total verified votes</span>
+                      <strong style={{ fontSize: "12px", color: "#37453d" }}>
+                        {isPublished ? "Candidate Results" : "Candidate Roster"}
+                      </strong>
+                      <span style={{ fontSize: "10px", color: "#85938a" }}>
+                        {isPublished ? `${summary.totalVotes} total verified votes` : "Tally withheld until publication"}
+                      </span>
                     </div>
-                    <div className="record-candidates">
-                      {summary.candidateResults.map((candidate) => {
-                        const pct = summary.totalVotes > 0 ? Math.round((candidate.voteCount / summary.totalVotes) * 100) : 0;
-                        return (
-                          <div className="candidate-tally-row" key={candidate.candidateId}>
-                            <div className="candidate-tally-info">
-                              <span className="candidate-tally-name">{candidate.name}</span>
-                              <span className="candidate-tally-count">
-                                <strong>{candidate.voteCount}</strong> votes ({pct}%)
-                              </span>
+                    {!isPublished ? (
+                      <div className="portal-status" style={{ marginTop: "0.5rem" }}>
+                        <span className="portal-status-mark">⏳</span>
+                        <div>
+                          <strong>Election Closed · Multi-Authority Custody</strong>
+                          <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
+                            In compliance with secret ballot principles, candidate vote totals remain encrypted until 2-of-3 threshold authority key reconstruction is finalized and officially authorized for publication by the administrator.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="record-candidates">
+                        {summary.candidateResults.map((candidate) => {
+                          const pct = summary.totalVotes > 0 ? Math.round((candidate.voteCount / summary.totalVotes) * 100) : 0;
+                          return (
+                            <div className="candidate-tally-row" key={candidate.candidateId}>
+                              <div className="candidate-tally-info">
+                                <span className="candidate-tally-name">{candidate.name}</span>
+                                <span className="candidate-tally-count">
+                                  <strong>{candidate.voteCount}</strong> votes ({pct}%)
+                                </span>
+                              </div>
+                              <div className="candidate-tally-bar-bg">
+                                <div className="candidate-tally-bar-fill" style={{ width: `${pct}%` }} />
+                              </div>
                             </div>
-                            <div className="candidate-tally-bar-bg">
-                              <div className="candidate-tally-bar-fill" style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   <div className="results-verification-section">

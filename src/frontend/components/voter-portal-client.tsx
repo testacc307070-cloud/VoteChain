@@ -14,6 +14,9 @@ import {
   Lock,
   RefreshCw,
   AlertTriangle,
+  Download,
+  Trophy,
+  BarChart2,
 } from "lucide-react";
 import {
   type QueuedOfflineVote,
@@ -31,16 +34,25 @@ type Candidate = {
   sortOrder: number;
 };
 
+type ElectionResults = {
+  totalVotes: number;
+  winner: { candidateId: string; name: string; voteCount: number } | null;
+  candidateResults: Array<{ candidateId: string; name: string; voteCount: number }>;
+};
+
 type Election = {
   id: string;
   name: string;
   description: string;
+  status: string;
   startTime: string;
   endTime: string;
+  resultsPublishedAt?: string | null;
   candidates: Candidate[];
   hasVoted: boolean;
   isEligible?: boolean;
   eligibilityReason?: string;
+  results?: ElectionResults | null;
 };
 
 type VoterPortalProps = {
@@ -74,6 +86,13 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
   const [error, setError] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
 
+  // Update receipt if parent re-renders with new initialReceipt
+  useEffect(() => {
+    if (initialReceipt && !receipt) {
+      setReceipt(initialReceipt);
+    }
+  }, [initialReceipt, receipt]);
+
   // Load queued votes from persistent IndexedDB
   const refreshQueue = useCallback(async () => {
     try {
@@ -100,7 +119,7 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
       const results = await synchronizeAllPendingVotes({
         onProgress: (vote, res) => {
           if (res.ok && res.status === "CONFIRMED") {
-            setReceipt({
+            const confirmedReceipt = {
               receiptId: res.receiptId,
               electionId: vote.electionId,
               voteId: res.voteId,
@@ -109,7 +128,8 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
               recordHash: "",
               submittedAt: new Date().toISOString(),
               zkVerified: "true",
-            });
+            };
+            setReceipt(confirmedReceipt);
             setSuccessMessage(
               `Vote confirmed on Ethereum Sepolia! Tx: ${res.txHash.slice(0, 18)}... Block #${res.blockNumber}`
             );
@@ -255,12 +275,33 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
 
   return (
     <main className="portal-shell">
+      {/* Header with Navigation Links */}
       <header className="portal-header">
-        <Link className="brand" href="/portal">
+        <Link className="brand" href="/portal" aria-label="VoteChain voter portal">
           <span className="brand-mark"><span /><span /><span /></span>
           <span>votechain<span className="brand-period">.</span></span>
         </Link>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+          <nav style={{ display: "flex", gap: "14px", alignItems: "center", marginRight: "0.5rem" }}>
+            <Link
+              href="/portal"
+              style={{ fontSize: "12px", color: "var(--green-dark, #1d634a)", fontWeight: 650, textDecoration: "none" }}
+            >
+              Voter Portal
+            </Link>
+            <Link
+              href="/results"
+              style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}
+            >
+              Results
+            </Link>
+            <Link
+              href="/verify"
+              style={{ fontSize: "12px", color: "#64736a", textDecoration: "none" }}
+            >
+              Verify
+            </Link>
+          </nav>
           <form action="/api/auth/logout" method="post">
             <button className="portal-signout" type="submit">Sign out</button>
           </form>
@@ -333,7 +374,7 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                 <div key={item.id} className="candidate-readonly" style={{ justifyContent: "space-between" }}>
                   <div>
                     <strong>{item.electionName}</strong>
-                    <div style={{ fontSize: "0.8rem", color: "var(--muted, #888)" }}>
+                    <div style={{ fontSize: "0.8rem", color: "var(--muted, #888)", wordBreak: "break-all" }}>
                       Encrypted Ballot: <code>{item.encryptedBallot.slice(0, 28)}...</code> · Queued at{" "}
                       {new Date(item.queuedAt).toLocaleTimeString()}
                     </div>
@@ -379,46 +420,74 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
           <div className="portal-status" style={{ marginTop: "1.5rem", borderLeft: "4px solid #10b981" }}>
             <span className="portal-status-mark">✓</span>
             <div style={{ width: "100%" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <strong>Vote confirmed</strong>
-                {receipt.recordHash && (
-                  <Link
-                    href={`/verify?electionId=${receipt.electionId}&voteId=${receipt.voteId}&submittedAt=${receipt.submittedAt}&recordHash=${receipt.recordHash}`}
-                    style={{ display: "flex", alignItems: "center", gap: "0.25rem", fontSize: "0.85rem", color: "#38bdf8" }}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                <strong>Personal Ballot Receipt Verified</strong>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                  <a
+                    href={`/api/voter/receipt/pdf?electionId=${encodeURIComponent(receipt.electionId)}&receiptId=${encodeURIComponent(receipt.receiptId)}&voteId=${encodeURIComponent(receipt.voteId)}&recordHash=${encodeURIComponent(receipt.recordHash || "")}`}
+                    download={`VoteChain-Receipt-${receipt.receiptId}.pdf`}
+                    className="primary-button"
+                    style={{
+                      fontSize: "0.78rem",
+                      padding: "0.35rem 0.75rem",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.4rem",
+                      textDecoration: "none",
+                      height: "30px",
+                    }}
                   >
-                    Verify in Public Portal <ExternalLink size={13} />
-                  </Link>
-                )}
+                    <Download size={13} /> Download PDF Receipt
+                  </a>
+                  {receipt.recordHash && (
+                    <Link
+                      href={`/verify?electionId=${receipt.electionId}&voteId=${receipt.voteId}&submittedAt=${receipt.submittedAt}&recordHash=${receipt.recordHash}`}
+                      className="secondary-button"
+                      style={{
+                        fontSize: "0.78rem",
+                        padding: "0.35rem 0.75rem",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.35rem",
+                        textDecoration: "none",
+                        height: "30px",
+                      }}
+                    >
+                      <ExternalLink size={12} /> Verify Online
+                    </Link>
+                  )}
+                </div>
               </div>
-              <p style={{ margin: "0.25rem 0", fontSize: "0.85rem" }}>
+
+              <p style={{ margin: "0.35rem 0 0.2rem", fontSize: "0.85rem" }}>
                 Receipt ID: <code>{receipt.receiptId}</code> · Block #{receipt.blockNumber}
               </p>
-              <p style={{ margin: "0.25rem 0", fontSize: "0.85rem", wordBreak: "break-all" }}>
+              <p style={{ margin: "0.2rem 0", fontSize: "0.85rem", wordBreak: "break-all" }}>
                 Ethereum Sepolia Tx: <code>{receipt.txHash}</code>
               </p>
               {receipt.recordHash && (
-                <p style={{ margin: "0.25rem 0", fontSize: "0.85rem", wordBreak: "break-all" }}>
+                <p style={{ margin: "0.2rem 0", fontSize: "0.85rem", wordBreak: "break-all" }}>
                   Receipt Record Hash: <code>{receipt.recordHash}</code>
                 </p>
               )}
-              <div style={{ marginTop: "0.5rem", display: "flex", gap: "1rem", fontSize: "0.8rem" }}>
+              <div style={{ marginTop: "0.6rem", display: "flex", gap: "1rem", fontSize: "0.8rem", flexWrap: "wrap" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: "0.25rem", color: "#10b981" }}>
                   <ShieldCheck size={14} /> Zero-Knowledge Proof: VALID
                 </span>
                 <span style={{ display: "flex", alignItems: "center", gap: "0.25rem", color: "#10b981" }}>
-                  <Lock size={14} /> AES-256-GCM Secret Ballot: ENCRYPTED
+                  <Lock size={14} /> Secret Ballot: AES-256-GCM ENCRYPTED
                 </span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Active Elections List */}
+        {/* Elections List */}
         <div className="election-record-list" style={{ marginTop: "2rem" }}>
           {activeElections.length === 0 ? (
             <div className="election-empty">
-              <strong>No active elections are open right now.</strong>
-              <span>Check back when an administrator activates a ballot.</span>
+              <strong>No elections are open right now.</strong>
+              <span>Check back when an administrator activates an election ballot.</span>
             </div>
           ) : (
             activeElections.map((election) => {
@@ -426,23 +495,194 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                 (q) => q.electionId === election.id && q.status !== "FAILED" && q.status !== "CONFIRMED"
               );
 
+              const isResultsPublished = election.status === "RESULTS_PUBLISHED";
+              const isClosed = election.status === "CLOSED";
+
               return (
                 <article className="election-record" key={election.id}>
                   <div className="record-heading">
                     <div>
                       <span className="record-id">{election.id}</span>
-                      <h3>{election.name.replace(/Phase\s+\d+\s*[-:]?\s*/gi, "").trim() || election.name}</h3>
+                      <h3>{election.name}</h3>
                       {election.description && <p className="record-description">{election.description}</p>}
                     </div>
-                    <span className="election-status status-active"><i />ACTIVE</span>
+                    <span
+                      className={`election-status ${
+                        isResultsPublished
+                          ? "status-results_published"
+                          : isClosed
+                          ? "status-closed"
+                          : "status-active"
+                      }`}
+                    >
+                      <i />
+                      {election.status}
+                    </span>
                   </div>
 
                   <div className="record-metadata">
                     <span><strong>Start:</strong> {new Date(election.startTime).toUTCString().slice(0, 22)}</span>
                     <span><strong>End:</strong> {new Date(election.endTime).toUTCString().slice(0, 22)}</span>
+                    {isResultsPublished && election.resultsPublishedAt && (
+                      <span><strong>Results Published:</strong> {new Date(election.resultsPublishedAt).toUTCString().slice(0, 22)}</span>
+                    )}
                   </div>
 
-                  {election.isEligible === false ? (
+                  {/* 1. Official Published Results View */}
+                  {isResultsPublished ? (
+                    <div style={{ marginTop: "1rem" }}>
+                      <div
+                        style={{
+                          backgroundColor: "#fbfcfb",
+                          border: "1px solid var(--line, #e6e9e5)",
+                          borderRadius: 8,
+                          padding: "16px",
+                          marginBottom: "1rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "12px",
+                            flexWrap: "wrap",
+                            gap: 8,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <BarChart2 size={16} color="#2c795e" />
+                            <strong style={{ fontSize: "0.95rem", color: "#1e293b" }}>Official Verified Results</strong>
+                          </div>
+
+                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                            {election.results?.winner && (
+                              <span
+                                style={{
+                                  fontSize: "0.78rem",
+                                  fontWeight: 600,
+                                  backgroundColor: "#f0fdf4",
+                                  color: "#166534",
+                                  border: "1px solid #bbf7d0",
+                                  padding: "3px 8px",
+                                  borderRadius: 4,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                <Trophy size={13} /> Winner: {election.results.winner.name} ({election.results.winner.voteCount} votes)
+                              </span>
+                            )}
+                            <Link
+                              href="/results"
+                              className="secondary-button"
+                              style={{ fontSize: "0.78rem", padding: "3px 8px", height: "26px", textDecoration: "none" }}
+                            >
+                              View Full Audit Digest
+                            </Link>
+                          </div>
+                        </div>
+
+                        {election.results ? (
+                          <div style={{ display: "grid", gap: 8 }}>
+                            <div style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: 4 }}>
+                              Total Valid Votes Cast: <strong>{election.results.totalVotes}</strong>
+                            </div>
+                            {election.results.candidateResults.map((candidate) => {
+                              const total = election.results?.totalVotes || 0;
+                              const pct = total > 0 ? Math.round((candidate.voteCount / total) * 100) : 0;
+                              const isWinner = election.results?.winner?.candidateId === candidate.candidateId;
+
+                              return (
+                                <div
+                                  key={candidate.candidateId}
+                                  style={{
+                                    backgroundColor: isWinner ? "#f4faf6" : "#ffffff",
+                                    border: `1px solid ${isWinner ? "#bbf7d0" : "#edf0ec"}`,
+                                    borderRadius: 6,
+                                    padding: "10px 14px",
+                                  }}
+                                >
+                                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                    <span style={{ fontWeight: isWinner ? 700 : 600, color: "#1e293b", fontSize: "0.9rem" }}>
+                                      {candidate.name} {isWinner && "🏆"}
+                                    </span>
+                                    <span style={{ fontSize: "0.85rem", color: "#334155" }}>
+                                      <strong>{candidate.voteCount}</strong> votes ({pct}%)
+                                    </span>
+                                  </div>
+                                  <div style={{ height: 6, backgroundColor: "#edf0ec", borderRadius: 3, marginTop: 6, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${pct}%`, backgroundColor: isWinner ? "#2c795e" : "#64748b", borderRadius: 3 }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                            Official results authorized. View the full public integrity ledger for audit proofs.
+                          </div>
+                        )}
+                      </div>
+
+                      {election.hasVoted && (
+                        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <a
+                            href={`/api/voter/receipt/pdf?electionId=${encodeURIComponent(election.id)}`}
+                            download={`VoteChain-Receipt-${election.id}.pdf`}
+                            className="secondary-button"
+                            style={{
+                              fontSize: "0.8rem",
+                              padding: "0.35rem 0.75rem",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.4rem",
+                              textDecoration: "none",
+                              height: "30px",
+                            }}
+                          >
+                            <Download size={13} /> Download PDF Receipt
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ) : isClosed ? (
+                    /* 2. Closed Election View (Results Pending Publication) */
+                    <div style={{ marginTop: "1rem" }}>
+                      <div className="portal-status" style={{ borderLeft: "4px solid #f59e0b" }}>
+                        <span className="portal-status-mark" style={{ color: "#f59e0b" }}>⏳</span>
+                        <div>
+                          <strong>Election Closed · Final Tally in Progress</strong>
+                          <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                            Voting for this election has ended. Results are strictly encrypted and withheld until 2-of-3 threshold authority key reconstruction is finalized and officially published by the administrator.
+                          </p>
+                        </div>
+                      </div>
+
+                      {election.hasVoted && (
+                        <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+                          <a
+                            href={`/api/voter/receipt/pdf?electionId=${encodeURIComponent(election.id)}`}
+                            download={`VoteChain-Receipt-${election.id}.pdf`}
+                            className="secondary-button"
+                            style={{
+                              fontSize: "0.8rem",
+                              padding: "0.35rem 0.75rem",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "0.4rem",
+                              textDecoration: "none",
+                              height: "30px",
+                            }}
+                          >
+                            <Download size={13} /> Download PDF Receipt
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ) : election.isEligible === false ? (
+                    /* 3. Ineligible Notice */
                     <div className="portal-status" style={{ marginTop: "1rem", borderLeft: "4px solid #ef4444" }}>
                       <span className="portal-status-mark" style={{ color: "#ef4444" }}>✕</span>
                       <div>
@@ -451,14 +691,38 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                       </div>
                     </div>
                   ) : election.hasVoted ? (
-                    <div className="portal-status" style={{ marginTop: "1rem" }}>
-                      <span className="portal-status-mark">✓</span>
-                      <div>
-                        <strong>One-Person-One-Vote Enforced</strong>
-                        <p>Your anonymous vote participation has been recorded for this election. Duplicate votes are strictly prohibited.</p>
+                    /* 4. Active & Already Voted */
+                    <div style={{ marginTop: "1rem" }}>
+                      <div className="portal-status">
+                        <span className="portal-status-mark">✓</span>
+                        <div style={{ width: "100%" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                            <strong>One-Person-One-Vote Enforced</strong>
+                            <a
+                              href={`/api/voter/receipt/pdf?electionId=${encodeURIComponent(election.id)}`}
+                              download={`VoteChain-Receipt-${election.id}.pdf`}
+                              className="secondary-button"
+                              style={{
+                                fontSize: "0.78rem",
+                                padding: "0.3rem 0.65rem",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.35rem",
+                                textDecoration: "none",
+                                height: "28px",
+                              }}
+                            >
+                              <Download size={12} /> Download PDF Receipt
+                            </a>
+                          </div>
+                          <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                            Your anonymous vote participation has been recorded for this election. Duplicate votes are strictly prohibited.
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ) : isQueuedForThisElection ? (
+                    /* 5. Active & Queued Locally */
                     <div className="portal-status" style={{ marginTop: "1rem", borderLeft: "4px solid #f59e0b" }}>
                       <span className="portal-status-mark" style={{ color: "#f59e0b" }}>⏳</span>
                       <div>
@@ -471,6 +735,7 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                       </div>
                     </div>
                   ) : (
+                    /* 6. Active & Ready to Vote Form */
                     <form onSubmit={(e) => handleVoteSubmit(e, election)} style={{ marginTop: "1rem" }}>
                       <div className="record-candidate-heading">
                         <strong>Choose a candidate</strong>

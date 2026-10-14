@@ -206,6 +206,7 @@ export async function POST(request: Request, context: { params: Promise<{ electi
               data: {
                 id: receipt.voteId,
                 electionId: election.id,
+                voterId: user.id,
                 receiptId: receipt.receiptId,
                 txHash: receipt.txHash,
                 encryptedBallot: encryptedBallot.ciphertext,
