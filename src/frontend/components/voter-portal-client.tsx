@@ -18,6 +18,7 @@ import {
   Trophy,
   BarChart2,
 } from "lucide-react";
+import { formatDateTimeIST, formatTimeIST } from "@/shared/timezone";
 import {
   type QueuedOfflineVote,
   getAllQueuedVotes,
@@ -38,6 +39,10 @@ type ElectionResults = {
   totalVotes: number;
   winner: { candidateId: string; name: string; voteCount: number } | null;
   candidateResults: Array<{ candidateId: string; name: string; voteCount: number }>;
+  isTie?: boolean;
+  resultStatus?: string;
+  statusMessage?: string;
+  tiedCandidates?: Array<{ candidateId: string; name: string; voteCount: number }>;
 };
 
 type Election = {
@@ -376,7 +381,7 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                     <strong>{item.electionName}</strong>
                     <div style={{ fontSize: "0.8rem", color: "var(--muted, #888)", wordBreak: "break-all" }}>
                       Encrypted Ballot: <code>{item.encryptedBallot.slice(0, 28)}...</code> · Queued at{" "}
-                      {new Date(item.queuedAt).toLocaleTimeString()}
+                      {formatTimeIST(item.queuedAt)}
                     </div>
                     <div style={{ fontSize: "0.75rem", color: item.status === "SYNCHRONIZING" ? "#38bdf8" : "#f59e0b", marginTop: "2px" }}>
                       {item.status === "SYNCHRONIZING"
@@ -521,10 +526,10 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                   </div>
 
                   <div className="record-metadata">
-                    <span><strong>Start:</strong> {new Date(election.startTime).toUTCString().slice(0, 22)}</span>
-                    <span><strong>End:</strong> {new Date(election.endTime).toUTCString().slice(0, 22)}</span>
+                    <span><strong>Start:</strong> {formatDateTimeIST(election.startTime)}</span>
+                    <span><strong>End:</strong> {formatDateTimeIST(election.endTime)}</span>
                     {isResultsPublished && election.resultsPublishedAt && (
-                      <span><strong>Results Published:</strong> {new Date(election.resultsPublishedAt).toUTCString().slice(0, 22)}</span>
+                      <span><strong>Results Published:</strong> {formatDateTimeIST(election.resultsPublishedAt)}</span>
                     )}
                   </div>
 
@@ -555,8 +560,25 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                             <strong style={{ fontSize: "0.95rem", color: "#1e293b" }}>Official Verified Results</strong>
                           </div>
 
-                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                            {election.results?.winner && (
+                          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                            {election.results?.isTie ? (
+                              <span
+                                style={{
+                                  fontSize: "0.78rem",
+                                  fontWeight: 600,
+                                  backgroundColor: "#fef3c7",
+                                  color: "#92400e",
+                                  border: "1px solid #fde68a",
+                                  padding: "3px 8px",
+                                  borderRadius: 4,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 4,
+                                }}
+                              >
+                                <AlertTriangle size={13} /> Result: No Result — candidates are tied
+                              </span>
+                            ) : election.results?.winner ? (
                               <span
                                 style={{
                                   fontSize: "0.78rem",
@@ -572,6 +594,20 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                                 }}
                               >
                                 <Trophy size={13} /> Winner: {election.results.winner.name} ({election.results.winner.voteCount} votes)
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: "0.78rem",
+                                  fontWeight: 600,
+                                  backgroundColor: "#f1f5f9",
+                                  color: "#475569",
+                                  border: "1px solid #e2e8f0",
+                                  padding: "3px 8px",
+                                  borderRadius: 4,
+                                }}
+                              >
+                                Result: No Result — no votes recorded
                               </span>
                             )}
                             <Link
@@ -592,7 +628,7 @@ export default function VoterPortalClient({ user, activeElections, initialReceip
                             {election.results.candidateResults.map((candidate) => {
                               const total = election.results?.totalVotes || 0;
                               const pct = total > 0 ? Math.round((candidate.voteCount / total) * 100) : 0;
-                              const isWinner = election.results?.winner?.candidateId === candidate.candidateId;
+                              const isWinner = !election.results?.isTie && election.results?.winner?.candidateId === candidate.candidateId;
 
                               return (
                                 <div

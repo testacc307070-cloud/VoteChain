@@ -56,7 +56,8 @@ Earlier phase documents contain test run reports for their respective checkouts.
 - Voters register and verify their email, pass the per-election eligibility check, cast one accepted ballot, and access its verification details and downloadable PDF receipt.
 - Offline ballots remain pending in the encrypted browser queue until synchronization succeeds.
 - Authority accounts sign in to `/authority` and provide the required distinct approvals/shares after closure. The administrator publishes the official tally only after authorization.
-- Observers use an election-scoped code at `/observe` or an authenticated account at `/observer`. The `/results` page exposes candidate totals after publication.
+- Observers use an election-scoped code at `/observe` or an authenticated account at `/observer`. The `/results` page exposes candidate totals after publication; a top-count tie is reported as “No Result,” with no unique winner.
+- Election scheduling and displayed election/audit timestamps use IST (`Asia/Kolkata`); persisted timestamps represent UTC instants.
 
 The implementation map, setup steps, environment-variable names, and prototype security boundaries are documented in [`README.md`](../README.md) and [`HOW_VOTECHAIN_WORKS.md`](./HOW_VOTECHAIN_WORKS.md).
 

@@ -225,6 +225,9 @@ export async function GET(
         merkleRoot: election.merkleRoot || integrity.merkleRoot,
         candidates,
         winner: isResultsPublished && publishedSummary?.winner ? publishedSummary.winner : null,
+        isTie: isResultsPublished && publishedSummary ? publishedSummary.isTie : false,
+        resultStatus: isResultsPublished && publishedSummary ? publishedSummary.resultStatus : null,
+        statusMessage: isResultsPublished && publishedSummary ? publishedSummary.statusMessage : null,
         blockchain: {
           blockCount: election.blocks.length,
           blocks: election.blocks.slice(-10).map((b) => ({

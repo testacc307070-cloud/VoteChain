@@ -1,3 +1,5 @@
+import { parseDatetimeLocalAsIST } from "@/shared/timezone";
+
 export type CandidateInput = { name: string; description: string };
 export type ElectionInput = {
   name: string;
@@ -37,8 +39,8 @@ export function parseElectionInput(value: unknown): ParseResult<ElectionInput> {
     return { ok: false, error: "Provide both election start and end times." };
   }
 
-  const startTime = new Date(value.startTime);
-  const endTime = new Date(value.endTime);
+  const startTime = parseDatetimeLocalAsIST(value.startTime);
+  const endTime = parseDatetimeLocalAsIST(value.endTime);
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || startTime >= endTime) {
     return { ok: false, error: "The end time must be later than a valid start time." };
   }

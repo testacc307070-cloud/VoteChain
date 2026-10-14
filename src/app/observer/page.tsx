@@ -6,7 +6,8 @@ import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/ver
 import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
 import { buildElectionIntegritySnapshot } from "@/verification/merkle";
 import TamperDemo from "@/frontend/components/tamper-demo";
-import { ShieldCheck, Eye, Lock, FileText, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, Eye, Lock, FileText, CheckCircle2, AlertTriangle } from "lucide-react";
+import { formatTimeIST } from "@/shared/timezone";
 
 export default async function ObserverPage() {
   const user = await getCurrentUser();
@@ -155,14 +156,21 @@ export default async function ObserverPage() {
                   {/* Results Section */}
                   {summary ? (
                     <div style={{ marginTop: "1.5rem" }}>
-                      <strong>Published Results & Tallies</strong>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <strong>Published Results & Tallies</strong>
+                        {summary.isTie && (
+                          <span style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                            <AlertTriangle size={14} /> No Result — candidates are tied
+                          </span>
+                        )}
+                      </div>
                       <div className="record-candidates" style={{ marginTop: "0.5rem" }}>
                         {summary.candidateResults.map((candidate) => (
                           <div className="candidate-readonly" key={candidate.candidateId}>
                             <span className="candidate-order">{candidate.voteCount}</span>
                             <span className="candidate-readonly-name">
                               {candidate.name}
-                              <small>{candidate.voteCount} votes · Winner: {summary.winner?.candidateId === candidate.candidateId ? "YES" : "NO"}</small>
+                              <small>{candidate.voteCount} votes · Winner: {!summary.isTie && summary.winner?.candidateId === candidate.candidateId ? "YES" : "NO"}</small>
                             </span>
                           </div>
                         ))}
@@ -224,7 +232,7 @@ export default async function ObserverPage() {
                       <p style={{ margin: "0.25rem 0 0 0", fontSize: "0.8rem" }}>{log.details}</p>
                     </div>
                     <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--muted, #888)" }}>
-                      <div>{new Date(log.timestamp).toLocaleTimeString()}</div>
+                      <div>{formatTimeIST(log.timestamp)}</div>
                       <code>{log.eventHash.slice(0, 12)}...</code>
                     </div>
                   </div>

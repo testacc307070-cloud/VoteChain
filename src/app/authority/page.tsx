@@ -215,14 +215,21 @@ export default async function AuthorityPage() {
                   {/* Results Summary if Tally is Decrypted */}
                   {summary && (
                     <div style={{ marginTop: "1.5rem" }}>
-                      <strong>Reconstructed Election Tally:</strong>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <strong>Reconstructed Election Tally:</strong>
+                        {summary.isTie && (
+                          <span style={{ fontSize: "0.8rem", color: "#b45309", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                            <AlertTriangle size={14} /> No Result — candidates are tied
+                          </span>
+                        )}
+                      </div>
                       <div className="record-candidates" style={{ marginTop: "0.5rem" }}>
                         {summary.candidateResults.map((candidate) => (
                           <div className="candidate-readonly" key={candidate.candidateId}>
                             <span className="candidate-order">{candidate.voteCount}</span>
                             <span className="candidate-readonly-name">
                               {candidate.name}
-                              <small>{candidate.voteCount} votes · Winner: {summary?.winner?.candidateId === candidate.candidateId ? "YES" : "NO"}</small>
+                              <small>{candidate.voteCount} votes · Winner: {!summary?.isTie && summary?.winner?.candidateId === candidate.candidateId ? "YES" : "NO"}</small>
                             </span>
                           </div>
                         ))}

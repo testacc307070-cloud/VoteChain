@@ -4,6 +4,7 @@ import { prisma } from "@/database/prisma";
 import { getCurrentUser } from "@/backend/auth/session";
 import { createElectionAuditDigest, summarizeStoredElectionResults } from "@/verification/results";
 import { buildBlockchainSummary, verifyBlockchainChain } from "@/blockchain/blockchain";
+import { formatDateTimeIST } from "@/shared/timezone";
 
 export default async function ElectionDetailPage({
   params,
@@ -76,8 +77,8 @@ export default async function ElectionDetailPage({
 
         <div className="record-metadata" style={{ marginBottom: "1.5rem" }}>
           <span><strong>Status:</strong> {election.status}</span>
-          <span><strong>Started:</strong> {new Date(election.startTime).toISOString().replace("T", " ").slice(0, 16)} UTC</span>
-          <span><strong>Ends:</strong> {new Date(election.endTime).toISOString().replace("T", " ").slice(0, 16)} UTC</span>
+          <span><strong>Started:</strong> {formatDateTimeIST(election.startTime)}</span>
+          <span><strong>Ends:</strong> {formatDateTimeIST(election.endTime)}</span>
           <span><strong>Ledger:</strong> {blockchainSummary.blockCount} blocks</span>
           <span><strong>Chain:</strong> {verifyBlockchainChain(chain) ? "VALID" : "INVALID"}</span>
           <span><strong>Head:</strong> {blockchainSummary.headHash.slice(0, 18) || "N/A"}...</span>
@@ -99,7 +100,13 @@ export default async function ElectionDetailPage({
               <div>
                 <strong>{isPublished ? "Results published" : "Verification window open"}</strong>
                 <p>
-                  Total votes: {summary.totalVotes}. Winner: {summary.winner ? `${summary.winner.name} (${summary.winner.voteCount})` : "No votes"}. Audit digest: {digest?.slice(0, 28)}...
+                  Total votes: {summary.totalVotes}. Winner:{" "}
+                  {summary.isTie
+                    ? "No Result — candidates are tied"
+                    : summary.winner
+                      ? `${summary.winner.name} (${summary.winner.voteCount} votes)`
+                      : "No Result — no votes recorded"}
+                  . Audit digest: {digest?.slice(0, 28)}...
                 </p>
               </div>
             </div>

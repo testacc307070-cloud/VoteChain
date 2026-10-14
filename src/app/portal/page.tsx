@@ -169,6 +169,10 @@ export default async function PortalPage({
               totalVotes: summary.totalVotes,
               winner: summary.winner,
               candidateResults: summary.candidateResults,
+              isTie: summary.isTie,
+              resultStatus: summary.resultStatus,
+              statusMessage: summary.statusMessage,
+              tiedCandidates: summary.tiedCandidates,
             };
           } catch {
             // Summary error

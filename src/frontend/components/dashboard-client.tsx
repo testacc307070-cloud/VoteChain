@@ -34,6 +34,7 @@ import {
   Vote,
   X,
 } from "lucide-react";
+import { formatDateTimeIST } from "@/shared/timezone";
 
 export type UserItem = {
   id: string;
@@ -463,7 +464,7 @@ export default function DashboardClient({
           {
             id: "notif-active-election",
             title: `Live Election: ${metrics.activeElection.name}`,
-            detail: `${metrics.activeElection.votesCount} ballots verified on Sepolia ledger. Closes ${new Date(metrics.activeElection.endTime).toLocaleDateString()}.`,
+            detail: `${metrics.activeElection.votesCount} ballots verified on Sepolia ledger. Closes ${formatDateTimeIST(metrics.activeElection.endTime)}.`,
             icon: Vote,
             color: "#286b50",
             bg: "#eaf5ee",
@@ -1049,7 +1050,7 @@ export default function DashboardClient({
                   <div className="metric-top"><span>ACTIVE ELECTION</span><span className="status-pill"><i /> LIVE</span></div>
                   <h2>{metrics.activeElection?.name ?? "No Active Election"}</h2>
                   <div className="metric-foot">
-                    <span>{metrics.activeElection ? `Closes: ${new Date(metrics.activeElection.endTime).toLocaleDateString()}` : "Create an election to begin"}</span>
+                    <span>{metrics.activeElection ? `Closes: ${formatDateTimeIST(metrics.activeElection.endTime)}` : "Create an election to begin"}</span>
                     <button onClick={() => router.push("/elections")}>Manage <ArrowUpRight size={14} /></button>
                   </div>
                   <div className="panel-grid" aria-hidden="true" />

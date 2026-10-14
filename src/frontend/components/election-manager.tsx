@@ -26,6 +26,8 @@ import {
   X,
 } from "lucide-react";
 
+import { formatDateTimeIST, parseDatetimeLocalAsIST } from "@/shared/timezone";
+
 type ElectionStatus = ElectionRecord["status"];
 type Election = ElectionRecord;
 type ElectionManagerProps = { displayName: string; initialElections: ElectionRecord[] };
@@ -38,7 +40,7 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 function formatTime(value: string) {
-  return `${new Date(value).toISOString().replace("T", " ").slice(0, 16)} UTC`;
+  return formatDateTimeIST(value);
 }
 
 function statusName(status: ElectionStatus) {
@@ -216,8 +218,8 @@ export default function ElectionManager({ displayName, initialElections }: Elect
         body: JSON.stringify({
           name: form.get("name"),
           description: form.get("description"),
-          startTime: new Date(String(form.get("startTime"))).toISOString(),
-          endTime: new Date(String(form.get("endTime"))).toISOString(),
+          startTime: parseDatetimeLocalAsIST(String(form.get("startTime"))).toISOString(),
+          endTime: parseDatetimeLocalAsIST(String(form.get("endTime"))).toISOString(),
           candidates: candidateLines.map((name) => ({ name, description: "" })),
           eligibleVoterIds,
         }),
@@ -433,11 +435,11 @@ export default function ElectionManager({ displayName, initialElections }: Elect
               </label>
               <div className="schedule-fields">
                 <label className="field-block">
-                  <span>Starts <small>Local time</small></span>
+                  <span>Starts <small>(IST, Asia/Kolkata)</small></span>
                   <input name="startTime" type="datetime-local" required />
                 </label>
                 <label className="field-block">
-                  <span>Ends <small>Local time</small></span>
+                  <span>Ends <small>(IST, Asia/Kolkata)</small></span>
                   <input name="endTime" type="datetime-local" required />
                 </label>
               </div>

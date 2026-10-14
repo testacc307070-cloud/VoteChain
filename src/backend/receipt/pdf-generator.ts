@@ -10,6 +10,8 @@
  * - Reuses verified on-chain hashes and Merkle commitments.
  */
 
+import { formatDateTimeIST } from "@/shared/timezone";
+
 export interface ReceiptPdfData {
   electionName: string;
   electionId: string;
@@ -116,7 +118,7 @@ export function generateReceiptPdf(data: ReceiptPdfData): Buffer {
   drawRow("Election Reference ID", data.electionId, true);
   drawRow("Personal Receipt ID", data.receiptId, true, true);
   drawRow("Vote Reference ID", data.voteId, true);
-  drawRow("Submission Timestamp", `${new Date(data.submittedAt).toUTCString()}`);
+  drawRow("Submission Timestamp (IST)", formatDateTimeIST(data.submittedAt));
   drawRow("Submission Status", "CONFIRMED & MINED TO ETHEREUM TESTNET", false, true);
   drawRow("Blockchain Tx Hash", data.txHash, true);
   drawRow("Blockchain Block Number", `#${data.blockNumber}`, true);

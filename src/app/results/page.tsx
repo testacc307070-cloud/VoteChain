@@ -130,6 +130,10 @@ export default async function ResultsPage() {
                     totalVotes: election.votes.length,
                     candidateResults: election.candidates.map((candidate) => ({ candidateId: candidate.id, name: candidate.name, voteCount: 0 })),
                     winner: null,
+                    isTie: false,
+                    resultStatus: "NO_RESULT_NO_VOTES" as const,
+                    statusMessage: "No Result — no votes recorded",
+                    tiedCandidates: [],
                   };
                 }
               } else {
@@ -137,6 +141,10 @@ export default async function ResultsPage() {
                   totalVotes: election.votes.length,
                   candidateResults: election.candidates.map((candidate) => ({ candidateId: candidate.id, name: candidate.name, voteCount: 0 })),
                   winner: null,
+                  isTie: false,
+                  resultStatus: "NO_RESULT_NO_VOTES" as const,
+                  statusMessage: "No Result — no votes recorded",
+                  tiedCandidates: [],
                 };
               }
 
@@ -189,13 +197,42 @@ export default async function ResultsPage() {
                     </div>
                     <div className="results-meta-card">
                       <span className="results-meta-label">Winner</span>
-                      <strong className="results-meta-value results-meta-winner">
+                      <strong className="results-meta-value results-meta-winner" style={{ color: isPublished && summary.isTie ? "#b45309" : undefined }}>
                         {isPublished
-                          ? summary.winner
-                            ? `${summary.winner.name} (${summary.winner.voteCount} votes)`
-                            : "No votes recorded"
+                          ? summary.isTie
+                            ? "No Result — candidates are tied"
+                            : summary.winner
+                              ? `${summary.winner.name} (${summary.winner.voteCount} votes)`
+                              : "No Result — no votes recorded"
                           : "Pending official publication"}
                       </strong>
+                    </div>
+                    <div className="results-meta-card">
+                      <span className="results-meta-label">Result Status</span>
+                      <span
+                        className={`results-meta-badge ${
+                          !isPublished
+                            ? "results-badge-warning"
+                            : summary.isTie
+                              ? "results-badge-warning"
+                              : summary.winner
+                                ? "results-badge-success"
+                                : "results-badge-warning"
+                        }`}
+                        style={{
+                          backgroundColor: isPublished && summary.isTie ? "#fef3c7" : undefined,
+                          color: isPublished && summary.isTie ? "#92400e" : undefined,
+                          borderColor: isPublished && summary.isTie ? "#fde68a" : undefined,
+                        }}
+                      >
+                        {isPublished
+                          ? summary.isTie
+                            ? "NO RESULT (TIED)"
+                            : summary.winner
+                              ? "WINNER DECLARED"
+                              : "NO RESULT"
+                          : "IN PROGRESS"}
+                      </span>
                     </div>
                     <div className="results-meta-card">
                       <span className="results-meta-label">Audit Digest</span>
@@ -254,6 +291,27 @@ export default async function ResultsPage() {
                       </div>
                     ) : (
                       <div className="record-candidates">
+                        {summary.isTie && (
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "10px 14px",
+                              backgroundColor: "#fffbeb",
+                              border: "1px solid #fde68a",
+                              borderRadius: 6,
+                              marginBottom: 10,
+                              color: "#92400e",
+                              fontSize: "12px",
+                            }}
+                          >
+                            <span style={{ fontSize: "16px" }}>⚖️</span>
+                            <div>
+                              <strong>Result: No Result — candidates are tied.</strong> Two or more candidates shared the highest vote count ({summary.tiedCandidates.map((c) => c.name).join(", ")} with {summary.tiedCandidates[0]?.voteCount} votes each). No unique winner is declared.
+                            </div>
+                          </div>
+                        )}
                         {summary.candidateResults.map((candidate) => {
                           const pct = summary.totalVotes > 0 ? Math.round((candidate.voteCount / summary.totalVotes) * 100) : 0;
                           return (

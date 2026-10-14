@@ -16,6 +16,8 @@ Implemented features include:
 - Ethereum Sepolia transaction commitments, transaction-backed vote receipts, Merkle verification, audit views, and tamper-detection demonstrations.
 - Offline ballot queueing in browser IndexedDB with local encryption and synchronization when connectivity returns. A queued offline ballot is pending until the server accepts it.
 - Responsive layouts, downloadable PDF vote receipts, scoped observer access codes and monitoring, and official candidate totals displayed after results are published.
+- Election schedules, audit timestamps, and related date/time displays use Indian Standard Time (IST, Asia/Kolkata); schedule form values are interpreted as IST and stored as UTC instants.
+- Published results handle ties explicitly: tied candidates produce “No Result” rather than choosing a winner arbitrarily.
 
 ---
 
@@ -162,6 +164,8 @@ For evaluators, instructors, and security auditors, this table maps each logical
 | **Eligibility** | [`src/backend/voting/eligibility.ts`](src/backend/voting/eligibility.ts) | Per-election class roster whitelist verifier and voter eligibility checking. |
 | **Database** | [`src/database/prisma.ts`](src/database/prisma.ts) | Singleton Prisma client with connection pooling for PostgreSQL. |
 | **Database Schema** | [`prisma/schema.prisma`](prisma/schema.prisma) | PostgreSQL models, relations, unique constraints, eligibility, votes, and trustee approvals. |
+| **Timezone Utilities** | [`src/shared/timezone.ts`](src/shared/timezone.ts) | IST display formatting and interpretation of election schedule input values. |
+| **Results Rules** | [`src/verification/results.ts`](src/verification/results.ts) | Tally summaries, explicit tie/no-vote outcomes, and audit digest creation. |
 | **Ballot Encryption**| [`src/security/encryption.ts`](src/security/encryption.ts) | AES-256-GCM ballot encryption with random IV, authTag, and election AAD binding. |
 | **Election Keys** | [`src/security/election-keys.ts`](src/security/election-keys.ts) | Per-election Data Encryption Key (DEK) generator, master envelope, key commitments. |
 | **Zero-Knowledge** | [`src/security/zk-proof.ts`](src/security/zk-proof.ts) | BabyJubjub CDS 1-of-$N$ Schnorr proof generator and server-side verifier via Poseidon. |
@@ -185,13 +189,13 @@ For evaluators, instructors, and security auditors, this table maps each logical
 
 ## Election, voting, and oversight workflows
 
-1. **Admin setup and activation:** Create an election, set its dates, add candidates, upload the election's eligible-voter CSV, assign trustee authorities, and configure observer access. Review and activate the election through the admin controls.
+1. **Admin setup and activation:** Create an election, enter its schedule in IST, add candidates, upload the election's eligible-voter CSV, assign trustee authorities, and configure observer access. Schedule inputs are converted to UTC for storage. Review and activate the election through the admin controls.
 2. **Voter registration and eligibility:** A student registers with the configured institutional email and verifies the address with a one-time email link. For each election, the server checks the account against that election's uploaded roster.
 3. **Voting:** The voter selects a candidate in the portal. Online submissions contain the encrypted ballot and validity proof, which the server validates before recording participation, vote metadata, an internal chained block, and a Sepolia commitment. Database constraints and server checks enforce one accepted vote per voter/election.
 4. **Offline synchronization:** If disconnected, the browser stores an encrypted pending ballot in IndexedDB. It retries synchronization on reconnection; until the server accepts it, the queued ballot is not a confirmed vote.
 5. **Receipts:** After acceptance, the voter can view the transaction-backed receipt, use the verification page, and download a PDF receipt. The PDF endpoint is restricted to the voter who participated in the election or an administrator.
 6. **Authority lifecycle:** Administrators invite authority accounts by email. Invitees use the invitation link to activate/set up their account. Administrators assign trustees to elections; after closing, the required distinct authorities submit approvals/key shares to authorize a modern election tally.
-7. **Observers and results:** An observer can use an election-scoped access code at `/observe` or sign in for the `/observer` dashboard. Observers can inspect status, turnout and integrity information. Closing alone does not make candidate totals official; the authorized administrator publishes results after threshold approval, after which totals are available at `/results`.
+7. **Observers and results:** An observer can use an election-scoped access code at `/observe` or sign in for the `/observer` dashboard. Observers can inspect status, turnout and integrity information. Closing alone does not make candidate totals official; the authorized administrator publishes results after threshold approval, after which totals are available at `/results`. If the highest vote count is tied, the published outcome is “No Result” and no unique winner is declared. Times shown in election and audit views are formatted as IST.
 
 ---
 

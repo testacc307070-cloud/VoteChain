@@ -75,7 +75,7 @@ Statuses and test figures in this matrix describe earlier project work; they wer
 | **Phase 12**| Capacity & Load Testing (~100 Classroom Users) | 100 concurrent user simulation, race condition testing, Neon connection pool behavior, throughput and latency benchmarking. | **VERIFIED** |
 | **Phase 13**| Offline Queue & Synchronization | Encrypted IndexedDB queue; a queued ballot is pending until server acceptance after reconnection. | Historical record |
 | **Phase 14**| Classroom Election Simulation | Simulation documented in the phase report; treat its figures as historical test data, not a present certification. | Historical record |
-| **Phase 15**| Documentation & Organization | Architectural guides and Key Files guide; later features add voter results after publication, PDF receipts, and observer workflows. | Historical record |
+| **Phase 15**| Documentation & Organization | Architectural guides and Key Files guide; subsequent implementation also adds published results, PDF receipts, observer workflows, tied-result handling, and consistent IST display/scheduling. | Historical record |
 
 ---
 
@@ -96,6 +96,8 @@ Statuses and test figures in this matrix describe earlier project work; they wer
 - [x] **Balanced SHA-256 Merkle tree universal inclusion verification**
 - [x] **Encrypted IndexedDB offline queue and synchronization** (queued ballots still require server acceptance)
 - [x] **PDF vote receipts, observer access codes/dashboard, and published-results view**
+- [x] **Tie outcome handling** (a shared highest tally produces no unique winner)
+- [x] **IST scheduling/display** with UTC timestamp persistence
 
 Prior test results and audit documents remain available as historical records. Do not interpret this checklist as a current build, security certification, or claim that no secrets exist anywhere in repository history.
 
@@ -103,11 +105,11 @@ Prior test results and audit documents remain available as historical records. D
 
 ## 5. Operational workflow
 
-1. The administrator creates an election, sets its schedule, adds candidates, uploads the eligible-voter CSV, assigns trustees, configures observer access, then activates the election.
+1. The administrator creates an election, enters its schedule in IST, adds candidates, uploads the eligible-voter CSV, assigns trustees, configures observer access, then activates the election. Date/time values are stored as UTC instants.
 2. Voters register and verify email, pass the election roster check, and submit a ballot. Offline ballots stay encrypted in IndexedDB and count only after synchronization and server acceptance.
 3. Accepted votes receive transaction-backed receipts; voters can verify a receipt and download its PDF.
 4. The administrator invites authority users. Invitees activate their accounts from the invitation link; the administrator assigns authorities to the election.
-5. After closing, distinct authority approvals/shares authorize tallying. The administrator then publishes official results; closure by itself does not publish candidate totals.
+5. After closing, distinct authority approvals/shares authorize tallying. The administrator then publishes official results; closure by itself does not publish candidate totals. A tie for the highest count is displayed as “No Result,” without declaring a unique winner.
 6. Observers monitor through election-scoped access at `/observe` or the authenticated observer dashboard at `/observer`.
 
 ## 6. Environment and deployment procedure

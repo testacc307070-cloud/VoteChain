@@ -18,6 +18,7 @@ import {
   Vote,
   Trophy,
 } from "lucide-react";
+import { formatDateTimeIST, formatTimeIST } from "@/shared/timezone";
 
 interface ElectionSummary {
   id: string;
@@ -54,6 +55,9 @@ interface ObservationData {
     name: string;
     voteCount: number;
   } | null;
+  isTie?: boolean;
+  resultStatus?: string | null;
+  statusMessage?: string | null;
   blockchain: {
     blockCount: number;
     blocks: Array<{
@@ -575,12 +579,12 @@ export default function ObservePage() {
 
                   {/* Election Window */}
                   <div className="results-meta-card">
-                    <span className="results-meta-label">Election Time Window</span>
+                    <span className="results-meta-label">Election Time Window (IST)</span>
                     <div style={{ fontSize: "0.8rem", color: "#334155", marginTop: 4 }}>
-                      <strong>Start:</strong> {new Date(obsData.startTime).toUTCString().slice(0, 22)}
+                      <strong>Start:</strong> {formatDateTimeIST(obsData.startTime)}
                     </div>
                     <div style={{ fontSize: "0.8rem", color: "#334155", marginTop: 2 }}>
-                      <strong>End:</strong> {new Date(obsData.endTime).toUTCString().slice(0, 22)}
+                      <strong>End:</strong> {formatDateTimeIST(obsData.endTime)}
                     </div>
                   </div>
                 </div>
@@ -599,23 +603,42 @@ export default function ObservePage() {
                     <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#1e293b", margin: 0 }}>
                       Candidate Roster {obsData.status === "RESULTS_PUBLISHED" ? "& Official Final Results" : ""}
                     </h3>
-                    {obsData.status === "RESULTS_PUBLISHED" && obsData.winner && (
-                      <span
-                        style={{
-                          fontSize: "0.8rem",
-                          fontWeight: 600,
-                          backgroundColor: "#f0fdf4",
-                          color: "#166534",
-                          border: "1px solid #bbf7d0",
-                          padding: "3px 10px",
-                          borderRadius: 6,
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 5,
-                        }}
-                      >
-                        <Trophy size={14} /> Winner: {obsData.winner.name} ({obsData.winner.voteCount} votes)
-                      </span>
+                    {obsData.status === "RESULTS_PUBLISHED" && (
+                      obsData.isTie ? (
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            fontWeight: 600,
+                            backgroundColor: "#fffbeb",
+                            color: "#b45309",
+                            border: "1px solid #fde68a",
+                            padding: "3px 10px",
+                            borderRadius: 6,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <AlertTriangle size={14} /> Result: No Result — candidates are tied
+                        </span>
+                      ) : obsData.winner ? (
+                        <span
+                          style={{
+                            fontSize: "0.8rem",
+                            fontWeight: 600,
+                            backgroundColor: "#f0fdf4",
+                            color: "#166534",
+                            border: "1px solid #bbf7d0",
+                            padding: "3px 10px",
+                            borderRadius: 6,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                          }}
+                        >
+                          <Trophy size={14} /> Winner: {obsData.winner.name} ({obsData.winner.voteCount} votes)
+                        </span>
+                      ) : null
                     )}
                   </div>
 
@@ -739,7 +762,7 @@ export default function ObservePage() {
                             </code>
                           </div>
                           <div style={{ fontSize: "0.75rem", color: "#64748b" }}>
-                            {new Date(block.timestamp).toLocaleTimeString()}
+                            {formatTimeIST(block.timestamp)}
                           </div>
                         </div>
                       ))}
@@ -785,7 +808,7 @@ export default function ObservePage() {
                             <span style={{ color: "#334155" }}>{log.details}</span>
                           </div>
                           <span style={{ color: "#64748b", fontSize: "0.75rem", whiteSpace: "nowrap" }}>
-                            {new Date(log.timestamp).toLocaleTimeString()}
+                            {formatTimeIST(log.timestamp)}
                           </span>
                         </div>
                       ))}

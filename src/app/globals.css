@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --ink: #202b2a;
   --muted: #75817d;
   --line: #e6e9e5;
@@ -16,8 +17,10 @@
 }
 
 * { box-sizing: border-box; }
-html { min-height: 100%; background: var(--canvas); }
+html { min-height: 100%; background: var(--canvas); color-scheme: light; }
 body { margin: 0; color: var(--ink); background: var(--canvas); font-family: var(--font-ui); font-size: 14px; -webkit-font-smoothing: antialiased; }
+input, select, textarea { color-scheme: light; }
+input::placeholder, textarea::placeholder { color: #64748b; opacity: 1; }
 button, a { font: inherit; }
 button { color: inherit; }
 button:focus-visible, a:focus-visible { outline: 3px solid #8dc5a8; outline-offset: 3px; }

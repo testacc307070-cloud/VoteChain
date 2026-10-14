@@ -8,6 +8,7 @@ import DashboardClient, {
   type DashboardElectionItem,
 } from "@/frontend/components/dashboard-client";
 import { getCurrentUser } from "@/backend/auth/session";
+import { formatTimeIST } from "@/shared/timezone";
 
 export default async function HomePage() {
   const user = await getCurrentUser();
@@ -99,7 +100,7 @@ export default async function HomePage() {
   };
 
   const recentActivities: ActivityItem[] = rawAuditLogs.map((log) => ({
-    time: new Date(log.timestamp).toLocaleTimeString(),
+    time: formatTimeIST(log.timestamp),
     title: log.eventType.replaceAll("_", " "),
     detail: log.details || `Action by ${log.actorReference}`,
     tag: log.eventType.split("_")[0] || "AUDIT",

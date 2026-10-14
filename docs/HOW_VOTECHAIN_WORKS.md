@@ -58,6 +58,8 @@ Observers
 
 The exact status transitions are controlled by the administrator UI and API. A closed election is not necessarily a published-results election.
 
+Election schedule inputs are interpreted as Indian Standard Time (IST, `Asia/Kolkata`) and converted to UTC instants for storage. Election, audit, and observer timestamps are rendered in IST. After publication, a tie for the highest candidate vote count is reported as “No Result”; the application does not select a winner in a tie.
+
 ---
 
 ## 3. Deep Dive: Core Cryptographic & Security Mechanisms
@@ -153,7 +155,7 @@ Administrative APIs use server-side role checks:
    - Authority accounts are a separate role and cannot vote as ordinary eligible voters.
 
 3. **Election preparation and publication**:
-   - Create the election, configure its schedule, add candidates, import the eligible-voter CSV, assign trustees, and configure observer access.
+   - Create the election, enter its schedule in IST, add candidates, import the eligible-voter CSV, assign trustees, and configure observer access. Datetime-local input is converted to UTC for storage.
    - Use administrator lifecycle controls to activate the election, close it, and publish results only after required authority authorization.
    - Early closure is available to administrators. Elections with recorded participation/votes are protected from deletion to preserve audit history.
 
@@ -165,7 +167,7 @@ Administrative APIs use server-side role checks:
 5. **Voter receipts and results**:
    - After a vote has been accepted, the voter can verify its receipt at `/verify` and download a PDF receipt from the voter portal.
    - PDF downloads are authenticated and restricted to the participating voter or an administrator.
-   - `/results` lists closed and published elections. Candidate totals are official only for an election in the `RESULTS_PUBLISHED` state; a `CLOSED` state alone does not publish a tally.
+   - `/results` lists closed and published elections. Candidate totals are official only for an election in the `RESULTS_PUBLISHED` state; a `CLOSED` state alone does not publish a tally. A tie at the highest vote count produces no unique winner; zero votes is reported separately.
 
 ---
 
@@ -182,12 +184,14 @@ Administrative APIs use server-side role checks:
 | Offline flow | Encrypted IndexedDB queue with retry when connectivity returns; the ballot remains pending until backend acceptance. |
 | Observer monitoring | Scoped access-code view at `/observe` and signed-in role dashboard at `/observer`. |
 | Results | Official candidate totals become visible after results are authorized and the election is `RESULTS_PUBLISHED`. |
+| Tie handling | A top-count tie is `NO_RESULT_TIED`; zero counted votes is `NO_RESULT_NO_VOTES`. |
+| Timezone handling | Election schedule inputs and displayed election/audit times use IST; stored dates are UTC instants (`src/shared/timezone.ts`). |
 
 ---
 
 ## 5. Technology, configuration, and limits
 
-The stack is Next.js 16 App Router, React 19, Tailwind CSS 4, TypeScript, Prisma 6, PostgreSQL (Neon-hosted in the deployed environment), Nodemailer, ethers.js 6, Solidity, Ganache for local EVM development, `circomlibjs`, `snarkjs`, browser WebCrypto, and IndexedDB. The app is hosted on Vercel; Sepolia is a test network.
+The stack is Next.js 16 App Router, React 19, Tailwind CSS 4, TypeScript, Prisma 6, PostgreSQL (Neon-hosted in the deployed environment), Nodemailer, ethers.js 6, Solidity, Ganache for local EVM development, `circomlibjs`, `snarkjs`, browser WebCrypto, and IndexedDB. Shared IST formatting and datetime conversion are implemented in `src/shared/timezone.ts`. The app is hosted on Vercel; Sepolia is a test network.
 
 Local configuration uses environment variable names such as `DATABASE_URL`, `SESSION_SECRET`, `BALLOT_ENCRYPTION_KEY`, optional `KEY_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL`, `EMAIL_USER`, `EMAIL_APP_PASSWORD`, `ADMIN_EMAIL_USER`, `ADMIN_EMAIL_APP_PASSWORD`, `ETHEREUM_RPC_URL`, `VOTECHAIN_CONTRACT_ADDRESS`, and optional relayer values `ETHEREUM_PRIVATE_KEY` / `ETHEREUM_ACCOUNT`. Vercel provides its deployment URL variables. Keep actual values in local ignored `.env` files or the hosting provider's encrypted settings.
 

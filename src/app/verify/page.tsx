@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/backend/auth/session";
 import { verifyVoteReceipt } from "@/verification/receipts";
 import { createMerkleProof, createMerkleRoot, verifyMerkleProof } from "@/verification/merkle";
 import { ShieldCheck, CheckCircle2 } from "lucide-react";
+import { formatDateTimeIST } from "@/shared/timezone";
 
 export default async function VerifyPage({
   searchParams,
@@ -134,7 +135,7 @@ export default async function VerifyPage({
             <div className="record-metadata">
               <span><strong>Election ID:</strong> {vote.electionId}</span>
               <span><strong>Block Number:</strong> #{vote.blockNumber}</span>
-              <span><strong>Timestamp:</strong> {new Date(vote.submittedAt).toUTCString()}</span>
+              <span><strong>Timestamp (IST):</strong> {formatDateTimeIST(vote.submittedAt)}</span>
             </div>
             <div style={{ marginTop: "1rem", fontSize: "0.8rem", wordBreak: "break-all" }}>
               <div><strong>Ethereum Tx Hash:</strong> <code>{vote.txHash}</code></div>

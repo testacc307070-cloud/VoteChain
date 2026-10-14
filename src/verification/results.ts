@@ -20,6 +20,10 @@ export type ElectionResultsSummary = {
   totalVotes: number;
   candidateResults: CandidateResult[];
   winner: CandidateResult | null;
+  isTie: boolean;
+  resultStatus: "WINNER_DECLARED" | "NO_RESULT_TIED" | "NO_RESULT_NO_VOTES";
+  statusMessage: string;
+  tiedCandidates: CandidateResult[];
 };
 
 export function summarizeElectionResults(
@@ -40,12 +44,44 @@ export function summarizeElectionResults(
     }))
     .sort((left, right) => right.voteCount - left.voteCount || left.name.localeCompare(right.name));
 
-  const winner = candidateResults.length > 0 ? candidateResults[0] : null;
+  // Edge case: No votes cast or no candidates received valid votes
+  if (candidateResults.length === 0 || votes.length === 0 || candidateResults[0].voteCount === 0) {
+    return {
+      totalVotes: votes.length,
+      candidateResults,
+      winner: null,
+      isTie: false,
+      resultStatus: "NO_RESULT_NO_VOTES",
+      statusMessage: "No Result — no votes recorded",
+      tiedCandidates: [],
+    };
+  }
 
+  const highestVoteCount = candidateResults[0].voteCount;
+  const topCandidates = candidateResults.filter((c) => c.voteCount === highestVoteCount);
+
+  // If two or more candidates share the highest vote count, election result is "No Result"
+  if (topCandidates.length > 1) {
+    return {
+      totalVotes: votes.length,
+      candidateResults,
+      winner: null,
+      isTie: true,
+      resultStatus: "NO_RESULT_TIED",
+      statusMessage: "No Result — candidates are tied",
+      tiedCandidates: topCandidates,
+    };
+  }
+
+  // Exactly one candidate has the highest vote count
   return {
     totalVotes: votes.length,
     candidateResults,
-    winner,
+    winner: candidateResults[0],
+    isTie: false,
+    resultStatus: "WINNER_DECLARED",
+    statusMessage: `Winner: ${candidateResults[0].name}`,
+    tiedCandidates: [],
   };
 }
 

@@ -117,17 +117,19 @@ function AuthoritySetupInner() {
         className="login-box"
         style={{
           maxWidth: 480,
+          width: "min(480px, calc(100% - 32px))",
           margin: "60px auto",
           padding: "32px",
           textAlign: "center",
           backgroundColor: "#ffffff",
+          color: "#0f172a",
           border: "1px solid #e2e8f0",
           borderRadius: 12,
           boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
         }}
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <Shield style={{ width: 40, height: 40, color: "#4f46e5", animation: "pulse 2s infinite" }} />
+          <Shield style={{ width: 40, height: 40, color: "#2c795e", animation: "pulse 2s infinite" }} />
         </div>
         <h2 style={{ fontSize: "1.25rem", color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>Verifying Invitation Link...</h2>
         <p style={{ fontSize: "0.875rem", color: "#475569" }}>Securing connection and checking trustee authorization...</p>
@@ -142,10 +144,12 @@ function AuthoritySetupInner() {
         className="login-box"
         style={{
           maxWidth: 480,
+          width: "min(480px, calc(100% - 32px))",
           margin: "60px auto",
           padding: "32px",
           textAlign: "center",
           backgroundColor: "#ffffff",
+          color: "#0f172a",
           border: "1px solid #e2e8f0",
           borderRadius: 12,
           boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
@@ -153,7 +157,7 @@ function AuthoritySetupInner() {
       >
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
           {isMissingToken ? (
-            <Shield style={{ width: 44, height: 44, color: "#4f46e5" }} />
+            <Shield style={{ width: 44, height: 44, color: "#2c795e" }} />
           ) : (
             <AlertTriangle style={{ width: 44, height: 44, color: "#dc2626" }} />
           )}
@@ -171,8 +175,9 @@ function AuthoritySetupInner() {
           style={{
             display: "inline-block",
             padding: "10px 20px",
-            backgroundColor: "#4f46e5",
+            backgroundColor: "#2c795e",
             color: "#ffffff",
+            border: "1px solid #23634c",
             borderRadius: 8,
             textDecoration: "none",
             fontSize: "0.875rem",
@@ -191,10 +196,12 @@ function AuthoritySetupInner() {
         className="login-box"
         style={{
           maxWidth: 480,
+          width: "min(480px, calc(100% - 32px))",
           margin: "60px auto",
           padding: "32px",
           textAlign: "center",
           backgroundColor: "#ffffff",
+          color: "#0f172a",
           border: "1px solid #e2e8f0",
           borderRadius: 12,
           boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
@@ -214,8 +221,9 @@ function AuthoritySetupInner() {
             alignItems: "center",
             gap: 8,
             padding: "12px 24px",
-            backgroundColor: "#4f46e5",
+            backgroundColor: "#2c795e",
             color: "#ffffff",
+            border: "1px solid #23634c",
             borderRadius: 8,
             textDecoration: "none",
             fontSize: "0.95rem",
@@ -233,17 +241,19 @@ function AuthoritySetupInner() {
       className="login-box"
       style={{
         maxWidth: 500,
+        width: "min(500px, calc(100% - 32px))",
         margin: "40px auto",
         padding: "32px",
         backgroundColor: "#ffffff",
+        color: "#0f172a",
         border: "1px solid #e2e8f0",
         borderRadius: 12,
         boxShadow: "0 4px 20px -2px rgba(15, 23, 42, 0.08)",
       }}
     >
       <div style={{ textAlign: "center", marginBottom: 24 }}>
-        <div style={{ display: "inline-flex", padding: 10, borderRadius: 12, backgroundColor: "#eef2ff", marginBottom: 12 }}>
-          <Shield style={{ width: 32, height: 32, color: "#4f46e5" }} />
+        <div style={{ display: "inline-flex", padding: 10, borderRadius: 12, backgroundColor: "rgba(44, 121, 94, 0.1)", marginBottom: 12 }}>
+          <Shield style={{ width: 32, height: 32, color: "#2c795e" }} />
         </div>
         <h1 style={{ fontSize: "1.35rem", fontWeight: 700, color: "#0f172a", margin: "0 0 6px" }}>
           Authority Trustee Registration & Setup
@@ -266,7 +276,7 @@ function AuthoritySetupInner() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <Shield size={16} style={{ color: "#4f46e5" }} />
+          <Shield size={16} style={{ color: "#2c795e" }} />
           <span style={{ fontSize: "0.82rem", color: "#1e293b", fontWeight: 600 }}>Role: Authority Trustee</span>
         </div>
         <span
@@ -457,9 +467,9 @@ function AuthoritySetupInner() {
           style={{
             width: "100%",
             padding: "12px",
-            backgroundColor: isFormValid ? "#4f46e5" : "#e2e8f0",
-            color: isFormValid ? "#ffffff" : "#94a3b8",
-            border: isFormValid ? "1px solid #4338ca" : "1px solid #cbd5e1",
+            backgroundColor: isFormValid ? "#2c795e" : "#e2e8f0",
+            color: isFormValid ? "#ffffff" : "#475569",
+            border: isFormValid ? "1px solid #23634c" : "1px solid #cbd5e1",
             borderRadius: 8,
             fontWeight: 600,
             fontSize: "0.95rem",
@@ -468,7 +478,7 @@ function AuthoritySetupInner() {
             alignItems: "center",
             justifyContent: "center",
             gap: 8,
-            boxShadow: isFormValid ? "0 2px 8px rgba(79, 70, 229, 0.25)" : "none",
+            boxShadow: isFormValid ? "0 2px 8px rgba(44, 121, 94, 0.25)" : "none",
             transition: "all 0.15s ease",
           }}
         >
@@ -487,14 +497,14 @@ function PolicyItem({ label, ok }: { label: string; ok: boolean }) {
         display: "flex",
         alignItems: "center",
         gap: 6,
-        color: ok ? "#166534" : "#64748b",
-        fontWeight: ok ? 500 : 400,
+        color: ok ? "#166534" : "#475569",
+        fontWeight: ok ? 600 : 500,
       }}
     >
       {ok ? (
         <Check style={{ width: 14, height: 14, color: "#16a34a", flexShrink: 0 }} />
       ) : (
-        <X style={{ width: 14, height: 14, color: "#94a3b8", flexShrink: 0 }} />
+        <X style={{ width: 14, height: 14, color: "#64748b", flexShrink: 0 }} />
       )}
       <span>{label}</span>
     </div>

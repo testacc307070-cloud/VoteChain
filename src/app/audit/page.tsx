@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/backend/auth/session";
 import { buildElectionAuditTrail } from "@/verification/audit";
 import TamperDemo from "@/frontend/components/tamper-demo";
 import { FileText, ShieldCheck } from "lucide-react";
+import { formatTimeIST } from "@/shared/timezone";
 
 export default async function AuditPage() {
   const user = await getCurrentUser();
@@ -163,7 +164,7 @@ export default async function AuditPage() {
                       )}
                     </div>
                     <div style={{ textAlign: "right", fontSize: "10px", color: "#88968e", flexShrink: 0 }}>
-                      <div style={{ fontWeight: 500 }}>{new Date(log.timestamp).toLocaleTimeString()}</div>
+                      <div style={{ fontWeight: 500 }}>{formatTimeIST(log.timestamp)}</div>
                       <code style={{ fontSize: "9px", color: "#54645b" }}>{log.eventHash.slice(0, 16)}...</code>
                     </div>
                   </div>
