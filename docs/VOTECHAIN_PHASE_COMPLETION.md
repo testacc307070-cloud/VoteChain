@@ -1,102 +1,65 @@
-# VoteChain: Complete Phase-by-Phase Completion & Verification Matrix
+# VoteChain: Phase Completion and Implementation Record
 
-> **Final System Certification:** **100% COMPLETE & VERIFIED ACROSS ALL 15 PHASES**  
-> **Target Scope:** Production Cloud Deployment (Vercel, Neon PostgreSQL, Ethereum Sepolia)  
-> **Final Execution Date:** October 1, 2026
+> **Scope:** Historical implementation record for an educational prototype. Phase descriptions and test results below are not a current certification or a claim that this documentation update reran the test suites.
+> **Documentation refreshed:** October 14, 2026
 
 ---
 
 ## 1. Executive Summary
 
-This document certifies that all **15 phases** of the VoteChain privacy-preserving electronic voting system have been successfully implemented, integrated, tested, and verified end-to-end.
+This record summarizes the project's original 15 development phases. It is not a government-election certification, independent security audit, or guarantee of production suitability. The latest feature implementation also includes voter-facing results after publication, downloadable PDF receipts, and expanded observer access and monitoring.
 
-The system is deployed on a modern, serverless cloud architecture:
+The current deployment uses:
 - **Application Frontend & Backend**: Vercel Serverless (`Next.js 16.3.6`, React 19, Turbopack)
 - **Database**: Neon Serverless PostgreSQL with Prisma Client 6.12.0
-- **Blockchain**: Ethereum Sepolia Testnet with smart contract [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol) at `0x7339F8B088A2835F26e158c9F96690395D80264D`
-- **Email Service**: Gmail SMTP (`votechain.verify@gmail.com`) for institutional email verification
+- **Blockchain**: Ethereum Sepolia testnet with the `VoteChainLedger.sol` contract and server-side RPC/relayer configuration
+- **Email Service**: Nodemailer with SMTP settings supplied through environment variables
 - **Offline Storage Engine**: Browser IndexedDB (`VoteChainOfflineDB`) with WebCrypto AES-256-GCM encryption
 
 ---
 
-## 2. Complete Phase-by-Phase Verification Matrix (Phases 1–15)
+## 2. Historical Phase Record (Phases 1–15)
 
-| Phase | Phase Title | Status | Automated Tests Passed | Key Architecture & Verification Deliverables |
+Historical test counts below are preserved as project records only; they do not assert the current test status.
+
+| Phase | Phase Title | Historical status | Historical test record | Implemented area |
 | :---: | :--- | :---: | :---: | :--- |
 | **Phase 1** | **Institutional Email Verification** | **VERIFIED** | 13 / 13 | `@psgtech.ac.in` domain validation, Nodemailer Gmail SMTP delivery, single-use SHA-256 hashed verification tokens with 15m expiration, resend token invalidation. |
 | **Phase 2** | **Per-Election Class Eligibility Lists** | **VERIFIED** | 9 / 9 | CSV roster parsing, deduplication, row-limit safeguards, `ElectionEligibleVoter` database table, election-specific whitelists preventing cross-election access. |
 | **Phase 3** | **One-Person-One-Vote Strict Enforcement** | **VERIFIED** | 8 / 8 | Atomic database transactions, `ElectionVoterParticipation` unique constraint (`@@unique([electionId, voterId])`), duplicate vote blocking (HTTP 409), HMAC-SHA256 session token cookies. |
 | **Phase 4** | **Neon Cloud PostgreSQL Migration** | **VERIFIED** | DB Verified | Serverless PostgreSQL migration, connection pooling, cloud schema migration execution via Prisma, verified zero connection leaks. |
-| **Phase 5** | **Production Vercel Cloud Deployment** | **VERIFIED** | 1 / 1 | Next.js 16 App Router deployment, production security headers, dynamic base URL resolution (`APP_BASE_URL` / `VERCEL_PROJECT_PRODUCTION_URL`). |
+| **Phase 5** | **Vercel Cloud Deployment** | **Recorded complete** | 1 / 1 (historical) | Next.js App Router deployment, security headers, base URL support through `NEXT_PUBLIC_APP_URL` and Vercel-provided URL variables. |
 | **Phase 6** | **Security Hardening & Zero-Leakage Audit** | **VERIFIED** | 6 / 6 | Verified zero `NEXT_PUBLIC_` secret leaks, CSRF same-origin guards on all mutations, HSTS, frame denial (`X-Frame-Options: DENY`), nosniff headers, strict role isolation. |
-| **Phase 7** | **Ethereum Sepolia Testnet Migration** | **VERIFIED** | 6 / 6 | Deployed `VoteChainLedger.sol` to Sepolia at `0x7339F8B088A2835F26e158c9F96690395D80264D`, funded relayer account `0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`, automated RPC cleanup. |
+| **Phase 7** | **Ethereum Sepolia Testnet Integration** | **Recorded complete** | 6 / 6 (historical) | `VoteChainLedger.sol` integration and server-side RPC/relayer configuration. |
 | **Phase 8** | **Live Browser End-to-End Online Voting** | **VERIFIED** | E2E Verified | Live browser voting flow, real Sepolia transaction mining, cryptographic receipt verification, tampered receipt rejection. |
 | **Phase 9.1**| **Per-Election Cryptographic Keys** | **VERIFIED** | 5 / 5 | Unique 256-bit random Data Encryption Key (DEK) per election via `crypto.randomBytes(32)` + SHA-256 `keyCommitment`, backward-compatible migration path. |
 | **Phase 9.2**| **True 2-of-3 Threshold Key Custody** | **VERIFIED** | 4 / 4 | Shamir's Secret Sharing over Galois Field $\text{GF}(256)$ with $0x11b$ polynomial, designated trustee authority accounts, key share custody. |
-| **Phase 9.3**| **Mandatory Threshold Decryption** | **VERIFIED** | 15 / 15 | Global-key fallback strictly eliminated for modern elections; results require at least 2 distinct valid authority shares matching commitment; 0/1/duplicate/tampered shares rejected. |
+| **Phase 9.3**| **Threshold Tally Authorization** | **Recorded complete** | 15 / 15 (historical) | Modern elections require the configured number of distinct valid authority shares; legacy elections retain a compatibility path. |
 | **Phase 10** | **Full Online Stack End-to-End Integration** | **VERIFIED** | 14 / 14 | Complete online stack verified: Vercel $\rightarrow$ Neon $\rightarrow$ Browser $\rightarrow$ ZK Proof $\rightarrow$ Sepolia $\rightarrow$ 2-of-3 Authority Tally $\rightarrow$ Public Verification. |
 | **Phase 11** | **Security Audit & Penetration Testing** | **VERIFIED** | 29 / 29 | Comprehensive audit: IDOR, SQL/NoSQL injection, replay attacks, tampered ZK proofs, secret leakage, timing attacks, oversized inputs. |
 | **Phase 12** | **Capacity & Load Testing (~100 Users)** | **VERIFIED** | 8 Scenarios | 100 concurrent user benchmark, 40 simultaneous race condition requests (20 double-vote attempts strictly blocked), throughput and latency profiling. |
-| **Phase 13** | **Real Persistent Offline Voting & Auto-Sync** | **VERIFIED** | 9 / 9 | Durable browser IndexedDB (`VoteChainOfflineDB`), WebCrypto AES-256-GCM local encryption, PBKDF2 key envelope, refresh recovery, automatic online event auto-sync, real Sepolia mining. |
+| **Phase 13** | **Offline Queue & Synchronization** | **Recorded complete** | 9 / 9 (historical) | Encrypted IndexedDB queue and retry after reconnection; a queued ballot remains pending until backend acceptance. |
 | **Phase 14** | **Final Realistic Class Election Simulation** | **VERIFIED** | 12 / 12 | 100 classroom voters (`24CS001`–`24CS100`), 95 online + 5 offline sync, Sepolia block `#11821078`, 2-of-3 authority tally, Merkle verification, zero double votes. |
-| **Phase 15** | **Final System Audit, Docs & Key Files Guide** | **VERIFIED** | 17 Sections | Complete architectural audit, comprehensive documentation update, repository organization, teacher-friendly Key Files guide, test certification. |
+| **Phase 15** | **Documentation and Project Organization** | **Recorded complete** | Documentation record | Audit and guide documents; later additions include published-result views, PDF receipts, and observer workflows. |
 
 ---
 
-## 3. Comprehensive Test Results Across All Suites
+## 3. Historical Test Record
 
-```
-========================================================================================
-                          VOTECHAIN FINAL TEST SUITE RESULTS                            
-========================================================================================
-  Test Category / Suite                 File Reference                  Tests   Result
-  --------------------------------------------------------------------------------------
-  Core Unit & Cryptographic Suite       tests/unit/*.test.ts                158     PASS
-    • Registration & Email Tokens       registration.test.ts              13     PASS
-    • Class Eligibility Whitelisting    class-eligibility.test.ts          9     PASS
-    • One-Person-One-Vote & Auth        one-vote-auth.test.ts              8     PASS
-    • Production Security Hardening     phase6-security.test.ts            6     PASS
-    • Comprehensive Security Audit      phase11-security.test.ts          29     PASS
-    • Per-Election DEK Architecture     election-keys.test.ts              5     PASS
-    • 2-of-3 Threshold Authority        threshold-authority-9-2.test.ts    4     PASS
-    • Mandatory Threshold Decryption    threshold-mandatory-9-3.test.ts   15     PASS
-    • BabyJubjub CDS ZK Proofs          zk-proof.test.ts                   5     PASS
-    • AES-256-GCM Encrypted Ballots     encrypted-ballot.test.ts           5     PASS
-    • Balanced SHA-256 Merkle Trees     integrity.test.ts                  4     PASS
-    • Micro-Blockchain Continuity       blockchain.test.ts                 4     PASS
-    • CSRF Same-Origin Guards           csrf.test.ts                       4     PASS
-    • Voting Logic & Receipts           voting.test.ts                     4     PASS
-    • Role-Based Route Guards           role-routing.test.ts               4     PASS
-    • PDF Receipts & Observer Tokens    voter-results-receipt-observer.ts  3     PASS
-    • Observer Access Codes             observer-access.test.ts            1     PASS
-    • Audit Trail & Public Results      audit.test.ts, results, etc.      28     PASS
-  --------------------------------------------------------------------------------------
-  Phase 13 Real Offline Voting Suite    tests/unit/offline-voting.test.ts     9     PASS
-  Smart Contract Automated Test Suite   tests/contracts/VoteChainLedger.test.ts  6     PASS
-  Phase 14 Full Election Simulation     scripts/verify-phase14...ts       12     PASS
-  Production Turbopack Build            npm run build (35 routes)         35     PASS
-========================================================================================
-  TOTAL TESTS EXECUTED:                 185 Automated Tests + 35 Routes    0 FAILURES
-========================================================================================
-```
+Earlier phase documents contain test run reports for their respective checkouts. This documentation/push task did not rerun the manual or automated feature suites. Use the commands in [`README.md`](../README.md) to validate a chosen checkout; report results only after running them.
 
 ---
 
-## 4. Live Blockchain & Cloud Artifacts
+## 4. Current workflows and references
 
-- **Ethereum Sepolia Smart Contract Address:** [`0x7339F8B088A2835F26e158c9F96690395D80264D`](https://sepolia.etherscan.io/address/0x7339F8B088A2835F26e158c9F96690395D80264D)
-- **Relayer Account:** `0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`
-- **Phase 14 Sepolia Transaction Hash:** [`0x3571994fb08cb269a5dea627643f39ac43d8da4b5a8d84dc0a4928c50819588a`](https://sepolia.etherscan.io/tx/0x3571994fb08cb269a5dea627643f39ac43d8da4b5a8d84dc0a4928c50819588a)
-- **Phase 14 Mined Block Number:** `#11821078`
-- **On-Chain Commitment Hash:** `0xb75865bf73ca286f784eec03ce8fa6a84ebfa24619992ca3b6e828469a9ff558`
-- **On-Chain Verification State:** `commitmentUsed === true`
-- **Database Engine:** Neon PostgreSQL Serverless (AWS `ap-southeast-1`)
-- **Web Application Host:** Vercel Production Serverless Platform
+- Admin creates and configures elections, uploads eligibility CSVs, manages candidate lists, invites/activates authorities, assigns trustees, configures observer access, then activates and closes the election.
+- Voters register and verify their email, pass the per-election eligibility check, cast one accepted ballot, and access its verification details and downloadable PDF receipt.
+- Offline ballots remain pending in the encrypted browser queue until synchronization succeeds.
+- Authority accounts sign in to `/authority` and provide the required distinct approvals/shares after closure. The administrator publishes the official tally only after authorization.
+- Observers use an election-scoped code at `/observe` or an authenticated account at `/observer`. The `/results` page exposes candidate totals after publication.
 
----
+The implementation map, setup steps, environment-variable names, and prototype security boundaries are documented in [`README.md`](../README.md) and [`HOW_VOTECHAIN_WORKS.md`](./HOW_VOTECHAIN_WORKS.md).
 
-## 5. Certification Sign-off
+## 5. Scope and limitations
 
-All 15 phases have met 100% of their acceptance criteria. The codebase is fully documented, tested, and teacher-ready.
-
-**Phase 15 is the final phase of VoteChain. No further phases will be created.**
+VoteChain is a classroom/educational prototype. Email ownership is not real-world identity proof; the application and database remain part of the trust boundary; compromised client devices can expose choices; offline queueing does not guarantee successful delivery; testnet/blockchain/Merkle evidence cannot prove the source roster or software correct; and the system is not certified or coercion-resistant. It must not be used for governmental, statutory, or high-stakes elections.

@@ -1,6 +1,6 @@
 # How VoteChain Works: Complete Conceptual & Technical Architecture Guide
 
-This document provides a comprehensive technical walkthrough of the **VoteChain** electronic voting system based on the final, deployed, and verified cloud implementation.
+This document describes the implementation and current workflows in the **VoteChain educational voting prototype**. Deployment or test history recorded elsewhere is historical evidence, not a certification of the current build.
 
 ---
 
@@ -13,93 +13,74 @@ VoteChain operates as a distributed, privacy-preserving electronic voting system
    - Executes client-side **BabyJubjub CDS Zero-Knowledge proofs** and **WebCrypto AES-256-GCM** encryption.
    - Manages durable local offline buffering via **IndexedDB** (`VoteChainOfflineDB`).
 2. **Application Server Tier (Vercel Serverless)**:
-   - Enforces HMAC-SHA256 signed session cookies, Content Security Policy, and CSRF same-origin guards.
-   - Orchestrates Zero-Knowledge proof verification, double-blind database writes, and micro-blockchain block chaining.
-   - Manages per-election Data Encryption Keys (DEKs) and 2-of-3 Shamir threshold custody.
+   - Uses HMAC-signed HTTP-only session cookies, role checks, CSRF origin checks, and configured security headers.
+   - Orchestrates proof verification, encrypted ballot persistence, participation tracking, and micro-ledger block chaining.
+   - Implements per-election encryption keys and a 2-of-3 trustee approval/share workflow for tally authorization.
 3. **Database Tier (Neon PostgreSQL Serverless)**:
-   - Relational persistence across 8 Prisma models.
-   - Decouples voter identity from encrypted ballots (`ElectionVoterParticipation` vs. `ElectionVote`).
+   - PostgreSQL persistence through Prisma for users, elections, eligibility, participation, votes, trustees, and audit records.
+   - Participation has its own one-vote-per-election constraint. The vote schema also has optional voter/candidate relations for application and historical compatibility, so it is not accurate to claim that the database makes all ballots un-linkable.
 4. **Blockchain Tier (Ethereum Sepolia Testnet)**:
-   - Smart contract [`VoteChainLedger.sol`](contracts/VoteChainLedger.sol) deployed at `0x7339F8B088A2835F26e158c9F96690395D80264D`.
-   - Sponsored by a server-side relayer (`0xd9f43Cd01A317849e54DbcCB03380dA3EDE5E063`) so voters need zero cryptocurrency or Web3 wallet setup.
+   - The Solidity [`VoteChainLedger.sol`](../contracts/VoteChainLedger.sol) contract records vote commitments on Ethereum Sepolia.
+   - Server-side RPC/relayer settings are configured through environment variables; voters do not need individual wallets.
 
 ---
 
 ## 2. Step-by-Step Lifecycle: From Registration to Certified Tally
 
 ```
-[ Step 1: Registration & Institutional Verification ]
-  Voter submits Student ID (24CS001) + @psgtech.ac.in email + password
-  Server hashes password with Bcrypt (12 rounds) & sends 15-minute token via Gmail SMTP
-  Voter clicks verification link ──> account marked ACTIVE & emailVerified = true
+Admin prepares and activates election
+  ├─ Create election, candidates and schedule
+  ├─ Import election-specific eligibility CSV
+  ├─ Invite/activate authority accounts and assign trustees
+  └─ Configure scoped observer access
 
-[ Step 2: Election Management & Eligibility Whitelisting ]
-  Admin creates election ──> Generates 256-bit DEK & splits into 3 Shamir shares
-  Admin uploads official class CSV register ──> ElectionEligibleVoter populated
-  Election state advances: CREATED ──> ACTIVE
+Voter registers and verifies email
+  └─ Server checks account and election-specific eligibility
 
-[ Step 3: Candidate Selection & Local Encryption ]
-  Voter opens ballot box at /portal
-  ONLINE MODE: Generates BabyJubjub CDS ZK Proof ──> Encrypts with AES-256-GCM
-  OFFLINE MODE: Encrypts with WebCrypto AES-GCM + PBKDF2 envelope ──> Saved to IndexedDB
+Voter submits ballot
+  ├─ Online: encrypted ballot + validity proof -> server checks -> database + Sepolia commitment
+  └─ Offline: locally encrypted IndexedDB queue -> pending until later server acceptance
 
-[ Step 4: Submission & Zero-Knowledge Verification ]
-  Server verifies BabyJubjub CDS Disjunctive Schnorr proof using Poseidon hash
-  Confirms choice is valid candidate in {C1, ..., Cm} without revealing which one
+After an accepted submission
+  ├─ Participation constraint blocks a second accepted vote in that election
+  ├─ Transaction details and receipt become available; voter may download PDF
+  └─ Micro-ledger and public verification data support integrity checks
 
-[ Step 5: Double-Blind Database Commitment & Micro-Blockchain Append ]
-  Atomic transaction:
-  • ElectionVoterParticipation records: (electionId, voterId, votedAt)
-  • ElectionVote records: (encryptedBallot, nonce, authTag, proof, candidateId = null)
-  • Micro-blockchain ledger appends block referencing previous block hash
+Election closes
+  ├─ Distinct trustee approvals/shares authorize tallying for a modern election
+  ├─ Administrator reviews and publishes the results
+  └─ Official candidate totals are shown on /results only after publication
 
-[ Step 6: Ethereum Sepolia Blockchain Mining ]
-  Relayer computes commitment = Keccak256(ciphertext : zkProof)
-  Calls recordVote(electionId, commitment) on Sepolia smart contract
-  Contract enforces require(!commitmentUsed[commitment]) ──> Transaction mined in block
-
-[ Step 7: Cryptographic Receipt Issuance ]
-  Voter receives receipt: (receiptId, recordHash, txHash, blockNumber)
-  recordHash = SHA-256(electionId : voteId : submittedAt)
-
-[ Step 8: Election Closure & Mandatory 2-of-3 Authority Threshold ]
-  Admin sets election status to CLOSED
-  Tallying is locked until 2 of 3 designated trustee authorities submit their key shares
-  Server executes Lagrange polynomial interpolation over GF(256)
-  Reconstructed DEK validated against election keyCommitment
-
-[ Step 9: Anonymous Ballot Decryption & Certified Results ]
-  Server decrypts all ElectionVote rows in memory using reconstructed DEK
-  Candidate totals tallied without any voter identity linkage
-  Certified results published to /results
-
-[ Step 10: Public Receipt & Merkle Tree Inclusion Verification ]
-  Balanced SHA-256 Merkle tree constructed over all vote hashes
-  Any voter or citizen opens /verify without login to verify Merkle inclusion proof
+Observers
+  ├─ Election-scoped access code: /observe
+  └─ Authenticated observer role: /observer
 ```
+
+The exact status transitions are controlled by the administrator UI and API. A closed election is not necessarily a published-results election.
 
 ---
 
 ## 3. Deep Dive: Core Cryptographic & Security Mechanisms
 
-### 3.1 Student Registration & Email Verification
+### 3.1 Registration, eligibility, and email verification
 - **Institutional Domain Requirement**: Registration strictly requires the `@psgtech.ac.in` domain (`src/backend/auth/auth-validation.ts`).
 - **Student ID Format**: Validated against PSG Tech standard convention (2-digit admission year + 2-letter branch code + 3-digit roll number, e.g. `24CS001`).
 - **Single-Use Verification Token**:
   - A cryptographically random 32-byte hex token is generated.
   - The SHA-256 hash of the token is stored in the `VerificationToken` table with a 15-minute expiration timestamp.
-  - Verification emails are dispatched via Gmail SMTP (`votechain.verify@gmail.com`).
+  - Verification emails are dispatched through the configured SMTP transport.
   - Upon clicking the link, the token is verified, marked `usedAt = now()`, and the user's `emailVerified` flag is set to `true`. Expired or reused tokens are strictly rejected.
 
-### 3.2 Double-Blind Database Secrecy
-VoteChain physically decouples voter identity from the ballot choice in the database schema:
+### 3.2 Ballot privacy and participation records
+The schema separates one-vote participation enforcement from the encrypted ballot payload, but this is not a claim of unconditional anonymity:
 1. **`ElectionVoterParticipation`**:
    - Schema: `(id, electionId, voterId, votedAt, createdAt)`
    - Unique constraint: `@@unique([electionId, voterId])`
-   - Purpose: Enforces one-person-one-vote and prevents double voting. Contains **zero reference** to candidate choice, vote ID, or receipt ID.
+   - Purpose: Records participation and enforces one accepted vote per voter/election.
 2. **`ElectionVote`**:
-   - Schema: `(id, electionId, encryptedBallot, ballotNonce, ballotAuthTag, ballotProof, zkProof, receiptId, txHash, blockNumber, candidateId = null)`
-   - Purpose: Stores the anonymous encrypted ballot. `candidateId` is strictly `null` (anonymized). There are **no foreign keys or correlation columns** linking an `ElectionVote` record back to a `User` or `ElectionVoterParticipation` row.
+   - Stores the encrypted ballot and related receipt/transaction metadata.
+   - The Prisma schema has optional `voterId` and `candidateId` relations. Implementations and historical records may differ in whether these are populated. Do not claim the database schema itself guarantees that vote records cannot be linked to a voter.
+   - The intended privacy property is that candidate choice is carried in encrypted ballot data rather than exposed as a plain-text selection in normal voting flow.
 
 ### 3.3 Zero-Knowledge Proofs (BabyJubjub CDS Schnorr NIZKP)
 To prevent ballot manipulation without compromising voter secrecy, VoteChain uses a Cramer-Damgård-Schoenmakers (CDS) 1-of-$N$ Disjunctive Non-Interactive Zero-Knowledge Proof on the twisted Edwards **BabyJubjub curve** with the **Poseidon hash function** (`src/security/zk-proof.ts`):
@@ -109,10 +90,10 @@ To prevent ballot manipulation without compromising voter secrecy, VoteChain use
   - The Fiat-Shamir challenge is computed: $ch = \text{Poseidon}(P_1, \dots, P_m, A_1, \dots, A_m)$.
   - The real challenge is derived: $c_k = ch - \sum_{i \neq k} c_i \pmod q$.
   - The response is computed: $s_k = r + c_k \cdot x \pmod q$.
-- **Verification**: The verifier verifies $\sum c_i = ch \pmod q$ and $s_i \cdot G + c_i \cdot P_i = A_i$ for all $i$. The verifier confirms that the vote is a valid candidate selection while mathematically learning zero bits of information about which candidate was selected.
+- **Verification**: The verifier checks the challenge relation $\sum c_i = ch \pmod q$ and the response equations for each candidate. The proof is intended to establish a valid candidate selection without disclosing which candidate was chosen; the application has not been independently certified or formally audited.
 
 ### 3.4 Per-Election DEK & 2-of-3 Shamir Threshold Key Custody
-- **Per-Election Key**: Every election generates a unique 256-bit cryptographically random Data Encryption Key (DEK). A SHA-256 commitment of the key is stored on `Election.keyCommitment`.
+- **Per-Election Key**: Modern elections use an election-specific Data Encryption Key (DEK). A SHA-256 key commitment is stored in the election's database record (`Election.keyCommitment`); it is not the on-chain vote commitment.
 - **Shamir's Secret Sharing over $\text{GF}(256)$**:
   - The 32-byte DEK is split into 3 shares using high-entropy polynomials over Galois Field $\text{GF}(2^8)$ with irreducible polynomial $P(x) = x^8 + x^4 + x^3 + x + 1$ (`0x11b`).
   - Shares are serialized as `keyshare:<electionId>:<x>:<y_base64url>`.
@@ -122,17 +103,17 @@ To prevent ballot manipulation without compromising voter secrecy, VoteChain use
   - When the election closes, authorities submit their key shares.
   - Reconstructing the DEK requires at least 2 distinct valid authority shares via Lagrange interpolation over $\text{GF}(256)$:
     $$S = \sum_{j=1}^{k} y_j \prod_{m \neq j} \frac{x_m}{x_m \oplus x_j}$$
-  - The reconstructed key must match the SHA-256 `keyCommitment`.
+  - The reconstructed key must match the SHA-256 `keyCommitment` stored for that election.
   - 0 shares, 1 share, duplicate shares (A+A), tampered shares, and wrong-election shares are strictly rejected.
 
 ### 3.5 Real Persistent Offline Voting (Phase 13 Engine)
 VoteChain includes a durable client-side offline voting engine (`src/offline/indexeddb.ts`, `src/offline/offline-encryption.ts`, `src/offline/sync.ts`):
 1. **Network Disruption Detection**: Real `navigator.onLine` checks and `online`/`offline` window events.
 2. **Local Device Encryption**: When offline, the ballot is encrypted locally via the browser's native **WebCrypto AES-256-GCM** API. The ephemeral encryption key is sealed in a local envelope using PBKDF2 with SHA-256 derived from the device salt and election ID (`localKeyEnvelope`).
-3. **Durable Persistence**: The encrypted vote is stored in browser **IndexedDB** (`VoteChainOfflineDB`, object store `pending_votes`). It survives page reloads, tab closures, and browser restarts.
-4. **Zero Confidentiality Leakage**: Zero plaintext candidate choices or server secrets are stored on disk.
-5. **Auto-Synchronization**: When internet connectivity returns, the background synchronizer unseals the ballot in memory, submits it to the backend, verifies the ZK proof, mines it to Ethereum Sepolia, receives the real receipt, and marks the local queue status as `CONFIRMED`.
-6. **Replay Protection**: If a synchronized vote is submitted again, the server rejects it with HTTP 409 Conflict (`ALREADY_VOTED`).
+3. **Local Persistence**: The encrypted vote is stored in browser **IndexedDB** (`VoteChainOfflineDB`, object store `pending_votes`) and can survive reloads or restarts while browser storage remains available. Browser storage may be cleared or evicted.
+4. The queue is intended to keep ballot contents encrypted in local storage; it is not protection against a compromised browser/device.
+5. **Auto-Synchronization**: When connectivity returns, the synchronizer submits the pending ballot to the backend. Only a server-accepted submission can become a confirmed vote and receive its receipt.
+6. **Replay Protection**: Server and database checks reject a second accepted vote in the same election.
 
 ### 3.6 Micro-Blockchain & Ethereum Sepolia Dual-Ledger
 VoteChain maintains a dual-ledger architecture:
@@ -148,99 +129,68 @@ VoteChain maintains a dual-ledger architecture:
    - Once mined, the transaction hash and block number are embedded in the voter's receipt.
 
 ### 3.7 Balanced SHA-256 Merkle Inclusion Proofs
-- When an election closes and tallies are finalized, all cast ballot commitments are arranged as the leaves of a balanced binary SHA-256 Merkle tree (`src/verification/merkle.ts`).
+- The application builds SHA-256 Merkle integrity data from accepted vote/receipt records (`src/verification/merkle.ts`).
 - The Merkle root is calculated and published.
-- Any voter can enter their receipt ID at `/verify` to receive a logarithmic inclusion proof:
+- The `/verify` page accepts receipt verification information and checks inclusion against the applicable Merkle root:
   - The verifier hashes the voter's receipt along the sibling hash path:
     $$H_{\text{parent}} = \text{SHA-256}(H_{\text{left}} : H_{\text{right}})$$
-  - If the computed hash matches the certified Merkle root, it proves mathematically that the voter's ballot was included in the official tally without revealing the voter's candidate selection.
+  - A valid inclusion check is evidence that the corresponding record is represented by the checked root; it does not by itself certify the election process or its input data.
 
-### 3.8 Administrator Management & Election Lifecycle Controls
-VoteChain provides robust administrative capabilities strictly guarded by server-side role validation (`requireAdminApi` in `src/backend/voting/admin-api.ts`):
+### 3.8 Administrator, authority, and observer workflows
+Administrative APIs use server-side role checks:
 
-1. **Admin Authentication & CLI Recovery**:
-   - The `ADMIN` account authenticates at `/api/auth/login` and is routed directly to the System Console at `/`.
-   - Admin credentials are protected with Bcrypt (cost factor 12).
-   - A standalone CLI management script (`scripts/create-or-reset-admin.ts`) enables operators to safely provision or reset administrator passwords without exposing database credentials, shell history, or process arguments:
+1. **Admin account**:
+   - Administrators sign in to the console at `/`.
+   - The local utility `scripts/create-or-reset-admin.ts` prompts for the password without echoing it. Passwords must not be supplied as command-line arguments:
      ```bash
      npx tsx --env-file=.env scripts/create-or-reset-admin.ts [email]
      ```
-   - The CLI prompts interactively with hidden input for the password and asks for password confirmation. Passwords are never accepted as command-line arguments.
 
-2. **Multi-Party Authority Trustee Management**:
-   - Managed via `/api/admin/authorities` and the Admin Dashboard.
-   - Exactly **3 authority accounts** hold key shares in the 2-of-3 threshold custody system.
-   - External email domains (e.g. Gmail) are accepted for trustee accounts.
-   - Invitations generate a cryptographically secure 256-bit token; only the SHA-256 hash is stored in the database.
-   - Tokens expire after 48 hours and point to `/authority/setup?token=...`.
-   - Setup page enforces a minimum 12-character password with complexity rules and WCAG-compliant high-contrast styling.
-   - Private Shamir shares are generated only upon threshold sign-off and are never returned in administrative GET/POST responses.
+2. **Authority invitations and activation**:
+   - An administrator invites authority accounts through the dashboard. The invitation email contains a time-limited, single-use activation link.
+   - The invitee follows the link to set up/activate the authority account and then signs in to `/authority`.
+   - Administrators assign trustees to each election. The election's configured threshold requires distinct authority approvals/shares after closure before a modern-election tally is authorized.
+   - Authority accounts are a separate role and cannot vote as ordinary eligible voters.
 
-3. **Early Election Closure ("Close Election Now")**:
-   - Allows administrators to terminate an `ACTIVE` election ahead of its configured `endTime` via `/api/admin/elections/[electionId]/close` or `/transition`.
-   - Requires explicit confirmation via modal dialog.
-   - Immediately halts voting; subsequent ballot cast attempts return HTTP 409 (`Voting is only available while an election is active`).
-   - Sets the effective `endTime` to `now()`, preserves all cast ballots and blockchain commitments, and permanently prevents reopening.
-   - Records an append-only audit event: `ELECTION_CLOSED_EARLY`.
+3. **Election preparation and publication**:
+   - Create the election, configure its schedule, add candidates, import the eligible-voter CSV, assign trustees, and configure observer access.
+   - Use administrator lifecycle controls to activate the election, close it, and publish results only after required authority authorization.
+   - Early closure is available to administrators. Elections with recorded participation/votes are protected from deletion to preserve audit history.
 
-4. **Safe Election Deletion & Audit Invariant**:
-   - Managed via `DELETE /api/admin/elections/[electionId]`.
-   - **Audit Trail Preservation Rule**: Elections with recorded votes (`votesCount > 0` or `participationsCount > 0`) **cannot be deleted** (HTTP 400). This protects the integrity of immutable Ethereum Sepolia transactions and Merkle inclusion proofs.
-   - **Unvoted Elections**: Elections with 0 cast votes can be safely deleted. Cascading deletion safely purges candidates, eligibility mappings, and blocks inside an atomic database transaction.
-   - Requires explicit confirmation dialog with confirmation text validation in the UI.
+4. **Observer access and monitoring**:
+   - An election-scoped access code opens `/observe` for monitoring via a scoped observer token.
+   - An authenticated account with the `OBSERVER` role uses `/observer` for the observer dashboard.
+   - Observer surfaces provide election/turnout and integrity information; official candidate totals are only shown after results publication.
 
-### 3.9 Downloadable Personal Vote Receipt PDF
-VoteChain includes a zero-dependency, pure vector PDF 1.4 generator (`src/backend/receipt/pdf-generator.ts` and `src/app/api/voter/receipt/pdf/route.ts`):
-- **Ballot Secrecy Guarantee**: The PDF **never contains the candidate name, candidate ID, or selection choice**, ensuring receipts cannot be leveraged for voter coercion or vote-buying.
-- **Proof of Inclusion Elements**:
-  - Personal Receipt ID and Vote Reference ID.
-  - Ethereum Sepolia transaction hash and mined block number.
-  - Receipt record hash: $\text{SHA-256}(\text{electionId} : \text{voteId} : \text{submittedAt})$.
-  - Merkle inclusion status and root commitment.
-  - Step-by-step verification instructions and a direct link to `/verify`.
-- **Strict Authorization**: Restricted to the voter's own cast ballot via session validation (`ElectionVoterParticipation` and `ElectionVote.voterId`), preventing ID substitution attacks.
-
-### 3.10 Independent Observer Access & Real-Time Monitoring
-VoteChain provides dedicated real-time monitoring for election observers (`src/app/observe/page.tsx`):
-- **Access Code Authentication**: Admins generate election-scoped codes (`VC-OBS-XXXX-XXXX-XXXX`). Only the SHA-256 hash is persisted in the database.
-- **Auto-Resolution & Scoped Sessions**: Observers can select an election or paste the code directly to auto-resolve the election. Successful authentication issues a time-slotted, election-scoped HMAC session token (`src/backend/auth/observer-token.ts`).
-- **Code Revocation/Rotation**: Rotating or removing the access code in the admin console immediately invalidates all active observer tokens.
-- **Live Read-Only Dashboard**:
-  - Displays real-time turnout %, total votes recorded, eligible voters, blockchain block height, and chain validity.
-  - Features configurable 15-second auto-refresh with active pause toggle.
-  - Candidate vote counts remain strictly withheld until official publication.
-  - Streams micro-blockchain block headers and append-only cryptographic audit logs.
-
-### 3.11 Voter Results Viewing After Official Publication
-VoteChain strictly protects ballot tally secrecy until official authorization:
-- **Pre-Publication Guard**: While an election is `ACTIVE` or `CLOSED`, candidate tallies and winners are strictly withheld across all voter, observer, and results pages (`/portal`, `/results`, `/observe`, `/observer`).
-- **Official Publication**: Once 2-of-3 authority key shares are submitted, the master DEK is reconstructed, ballots are decrypted, and the administrator officially marks the election as `RESULTS_PUBLISHED`.
-- **Voter Dashboard Results Card**: Eligible voters opening `/portal` can view the verified final results, candidate vote counts, percentage progress bars, and the official winner with a trophy indicator.
+5. **Voter receipts and results**:
+   - After a vote has been accepted, the voter can verify its receipt at `/verify` and download a PDF receipt from the voter portal.
+   - PDF downloads are authenticated and restricted to the participating voter or an administrator.
+   - `/results` lists closed and published elections. Candidate totals are official only for an election in the `RESULTS_PUBLISHED` state; a `CLOSED` state alone does not publish a tally.
 
 ---
 
-## 4. Implementation Status Matrix
+## 4. Implementation map
 
-| Component | Status | Production Implementation Details |
-| :--- | :--- | :--- |
-| **Institutional Email Verification** | **Production** | `@psgtech.ac.in` validation, Gmail SMTP, single-use 15m tokens (`src/backend/auth/registration.ts`). |
-| **Authentication & Role Guards** | **Production** | Bcrypt (12 rounds), HMAC session cookies, 4 role guards (`src/backend/auth/role-routing.ts`). |
-| **Cloud PostgreSQL Database** | **Production** | Neon Serverless PostgreSQL with Prisma Client 6.12.0 and connection pooling. |
-| **Vercel Cloud Deployment** | **Production** | Next.js 16.3.6 App Router, Turbopack, production security headers, CSRF origin checks. |
-| **Double-Blind Secrecy** | **Production** | Physical database separation between participation and anonymous encrypted ballots. |
-| **Per-Election DEK Architecture** | **Production** | Unique 256-bit random key per election + SHA-256 key commitment (`src/security/election-keys.ts`). |
-| **2-of-3 Threshold Authority Custody** | **Production** | Shamir $\text{GF}(256)$ sharing, 3 trustees, mandatory 2-of-3 quorum for tallies (`src/security/threshold.ts`). |
-| **Zero-Knowledge Proofs** | **Production** | BabyJubjub CDS 1-of-$N$ Schnorr NIZKP with Poseidon hashing via `circomlibjs` (`src/security/zk-proof.ts`). |
-| **Ethereum Sepolia Blockchain** | **Production** | `VoteChainLedger.sol` on Sepolia testnet at `0x7339F8B088A2835F26e158c9F96690395D80264D`. |
-| **Persistent Offline Voting** | **Production** | Client-side IndexedDB queue, WebCrypto AES-256-GCM, auto-sync upon `online` event. |
-| **Downloadable PDF Receipts** | **Production** | Pure vector PDF 1.4 generator, candidate choice strictly omitted, on-chain attestation (`src/backend/receipt/pdf-generator.ts`). |
-| **Observer Access & Monitoring** | **Production** | Scoped access codes, HMAC session tokens, live turnout metrics, 15s auto-refresh (`/observe`). |
-| **Voter Results After Publication**| **Production** | Interim tallies withheld; verified tallies and winner display revealed upon publication (`/portal`, `/results`). |
-| **Merkle Universal Verifiability** | **Production** | Balanced SHA-256 Merkle tree, inclusion proof generator, public verifier (`/verify`). |
-| **Micro-Blockchain Ledger** | **Production** | Chained block audit trail, SHA-256 previousHash links, tamper detection simulation (`/observer`). |
+| Component | Current implementation |
+| :--- | :--- |
+| Registration and authentication | Institutional email checks, Nodemailer delivery, bcryptjs hashes, HMAC session cookies, and role checks. |
+| Eligibility and one vote | Election-specific CSV roster import and server/database checks against repeat voting. |
+| Ballot confidentiality | AES-GCM ballot encryption and a candidate-validity proof. The database schema's optional voter relation means this prototype does not promise unconditional anonymity. |
+| Threshold tally authorization | Election-specific key commitment and distinct trustee approval/share threshold, normally 2 of 3. |
+| Blockchain | Ethereum Sepolia commitment through the `VoteChainLedger` contract; separate from the database-stored election key commitment. |
+| Receipts and integrity | Transaction receipt details, PDF download, Merkle verification, audit records, and an internal hash-linked block ledger. |
+| Offline flow | Encrypted IndexedDB queue with retry when connectivity returns; the ballot remains pending until backend acceptance. |
+| Observer monitoring | Scoped access-code view at `/observe` and signed-in role dashboard at `/observer`. |
+| Results | Official candidate totals become visible after results are authorized and the election is `RESULTS_PUBLISHED`. |
 
 ---
 
-## 5. Summary
+## 5. Technology, configuration, and limits
 
-VoteChain implements an end-to-end verifiable classroom electronic voting system that combines Zero-Knowledge proofs, double-blind database architecture, multi-authority threshold cryptography, Ethereum Sepolia blockchain commitments, persistent offline recovery, vector PDF receipts, and independent observer monitoring into a unified, open-source stack.
+The stack is Next.js 16 App Router, React 19, Tailwind CSS 4, TypeScript, Prisma 6, PostgreSQL (Neon-hosted in the deployed environment), Nodemailer, ethers.js 6, Solidity, Ganache for local EVM development, `circomlibjs`, `snarkjs`, browser WebCrypto, and IndexedDB. The app is hosted on Vercel; Sepolia is a test network.
+
+Local configuration uses environment variable names such as `DATABASE_URL`, `SESSION_SECRET`, `BALLOT_ENCRYPTION_KEY`, optional `KEY_ENCRYPTION_KEY`, `NEXT_PUBLIC_APP_URL`, `EMAIL_USER`, `EMAIL_APP_PASSWORD`, `ADMIN_EMAIL_USER`, `ADMIN_EMAIL_APP_PASSWORD`, `ETHEREUM_RPC_URL`, `VOTECHAIN_CONTRACT_ADDRESS`, and optional relayer values `ETHEREUM_PRIVATE_KEY` / `ETHEREUM_ACCOUNT`. Vercel provides its deployment URL variables. Keep actual values in local ignored `.env` files or the hosting provider's encrypted settings.
+
+See [`README.md`](../README.md) for prerequisites, migration and local run commands, deployment guidance, and the teacher-facing Key Files guide. Prisma schema changes should use committed migrations deployed with `npm run db:migrate`; this document update does not require a migration.
+
+**Limitations:** Email ownership is not identity proof; a compromised browser can expose a selected candidate before encryption; operators and database access remain in the threat model; offline ballots can remain unsynchronized; blockchain/Merkle evidence does not prove the roster or software was correct; and the system has no election certification or coercion resistance. It is an educational prototype, not a government-election system.
