@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/database/prisma";
 import { getCurrentUser } from "@/backend/auth/session";
 import { checkVoterElectionEligibility } from "@/backend/voting/eligibility";
-import { summarizeStoredElectionResults } from "@/verification/results";
+import { summarizeStoredElectionResults, type ElectionResultsSummary } from "@/verification/results";
 import { evaluateAuthorityThreshold, reconstructAndValidateElectionKey } from "@/security/threshold";
 import { getElectionEncryptionKey, isLegacyElection } from "@/security/election-keys";
 import VoterPortalClient from "@/frontend/components/voter-portal-client";
@@ -116,11 +116,7 @@ export default async function PortalPage({
         election.votes.some((v) => v.voterId === user.id);
 
       // Results compilation: ONLY allowed when election.status === "RESULTS_PUBLISHED"
-      let resultsSummary: {
-        totalVotes: number;
-        winner: { candidateId: string; name: string; voteCount: number } | null;
-        candidateResults: Array<{ candidateId: string; name: string; voteCount: number }>;
-      } | null = null;
+      let resultsSummary: ElectionResultsSummary | null = null;
 
       if (election.status === "RESULTS_PUBLISHED") {
         const threshold = election.requiredAuthorityApprovals ?? 2;
